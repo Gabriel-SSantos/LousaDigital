@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quadro no Ar</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; background: #0e1016; color: #eceef4; font-family: system-ui, sans-serif; font-size: 15px; }
+  .stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  /* A lousa ocupa o máximo da janela mantendo 16:9 */
+  canvas { display: block; width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16)); background: #fbfbf8; }
+  #status { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; text-align: center; padding: 16px; color: #aeb5c6; background: #0e1016; }
+  #status[hidden], #ajuda[hidden] { display: none; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 4px; padding: 8px 14px; cursor: pointer; }
+  #abrir { background: #8fa4ff; color: #0e1016; }
+  .barra { position: fixed; top: 10px; right: 10px; display: flex; gap: 8px; }
+  .barra button { background: rgba(20, 23, 32, 0.82); color: #eceef4; }
+  #ajuda { position: fixed; top: 54px; right: 10px; width: min(400px, calc(100vw - 20px)); max-height: calc(100vh - 64px); overflow-y: auto; box-sizing: border-box; background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 14px 16px; line-height: 1.55; }
+  #ajuda ul { margin: 0 0 10px; padding-left: 18px; }
+  #ajuda b { font-weight: 600; }
+  .readout { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; color: #9aa1b3; }
+  .readout pre { margin: 0 0 4px; font: inherit; color: #eceef4; white-space: pre-wrap; }
+  .readout b { color: #eceef4; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <canvas id="tela" width="1920" height="1080"></canvas>
+  <div id="status">
+    <span id="msg">Carregando o rastreador de mãos…</span>
+    <button id="abrir" type="button" hidden>Abrir câmera</button>
+  </div>
+</div>
+
+<div class="barra">
+  <button id="btAjuda" type="button">Ajuda</button>
+  <button id="btCheia" type="button">Tela cheia (F)</button>
+</div>
+
+<div id="ajuda" hidden>
+  <ul>
+    <li><b>Duas mãos:</b> todos os gestos valem para as duas, ao mesmo tempo.</li>
+    <li><b>Desenhar:</b> só o indicador erguido, sobre a lousa.</li>
+    <li><b>Clicar:</b> aponte para um botão e abaixe o indicador, fechando a mão.</li>
+    <li><b>Borracha:</b> indicador + médio erguidos e colados; passe sobre o traço.</li>
+    <li><b>Girar forma:</b> indicador + médio afastados em V, em cima da forma; gire a mão e a forma gira junto.</li>
+    <li><b>Mover forma:</b> palma para baixo, feche a pinça em cima da forma, arraste e abra para soltar.</li>
+    <li><b>Mudar o tamanho:</b> palma para cima, polegar e indicador em cima da forma (os outros dedos fechados). Afastar aumenta, aproximar diminui; abra a mão para travar.</li>
+    <li><b>Levantar a caneta:</b> polegar + indicador abertos.</li>
+    <li><b>Limpar tudo:</b> botão Limpar, ou indicador + médio + anelar erguidos e colados, com polegar e mindinho dobrados, parados por um instante.</li>
+    <li><b>Trava:</b> com o mindinho para fora, a mão solta o que estiver fazendo e não faz nenhum gesto.</li>
+  </ul>
+  <div class="readout">
+    <pre id="leitura">sem mão</pre>
+    <span>último clique = <b id="clique">—</b></span>
+  </div>
+</div>
+
+<video id="video" autoplay playsinline muted hidden></video>
+
+<script type="module">
+import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const W = 1280, H = 720;            // coordenadas lógicas da lousa
+const BW = 58, BH = 43, VAO = 8;    // tamanho dos botões e vão entre eles
+const PAINEL = { x: 110, y: 70, w: 20 + 4 * BW + 3 * VAO, h: 347 };   // afastado das bordas, onde a câmera perde a mão
+const noPainel = (x, y) => x > PAINEL.x - 12 && x < PAINEL.x + PAINEL.w + 12 && y > PAINEL.y - 12 && y < PAINEL.y + PAINEL.h + 12;
+
+// Limiares dos gestos. As distâncias são divididas pelo tamanho da palma, então não mudam com a distância até a câmera.
+const JANELA_CLIQUE = 250;          // ms: o clique vale onde o dedo apontava pouco antes de abaixar
+const TOLERANCIA_TRACO = 150;       // ms: falhas de leitura mais curtas que isso não quebram o traço
+const RAIO_BORRACHA = 28;
+const DEDOS_JUNTOS = 0.25, DEDOS_ABERTOS = 0.40;   // pontas do indicador e do médio: juntos = borracha, abertos = girar
+const LIMPAR_JUNTOS = 0.30;          // indicador-médio e médio-anelar abaixo disso contam como colados
+const FIRMEZA_LIMPAR = 300;         // ms com o gesto de limpar parado antes de apagar tudo
+const FIRMEZA_TRAVA = 80;           // ms com o mindinho para fora antes de a trava valer (ignora leituras soltas)
+const POLEGAR_ABERTO = 0.6;         // polegar afastado da base do indicador
+const DOBRA_MAXIMA = 0.6;           // abaixo disso o indicador está dobrado demais para ser pinça (é mão fechada)
+const PINCA_FECHA = 0.28, PINCA_ABRE = 0.45;       // distância polegar-indicador
+const PALMA_CIMA = 0.15, PALMA_BAIXO = 0.05;       // quanto o polegar está acima do indicador (ver palmaParaCima)
+const ESPERA_APOS_SOLTAR = 300;     // ms sem desenhar nem clicar depois de soltar uma forma
+const FIRMEZA_TAMANHO = 200;        // ms com o gesto parado sobre a forma antes de o tamanho começar a seguir
+const PISO_ABERTURA = 0.30;         // aberturas menores que isso contam como pinça fechada no cálculo do tamanho
+const COMECOU_ABERTO = 0.6;         // se o gesto de tamanho começou acima disso, fechar a pinça trava o tamanho
+const ESCALA_MIN = 0.25, ESCALA_MAX = 4;
+
+const video = document.getElementById('video');
+const tela = document.getElementById('tela');
+const ctx = tela.getContext('2d');
+const el = id => document.getElementById(id);
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const meio = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+// ---------- estado da lousa ----------
+const CORES = ['#111111', '#e5202b', '#1f5fe0', '#1a9d4b', '#f08a00', '#8a3fd1'];
+const TAMANHOS = [4, 8, 14, 24];
+const FORMAS = ['quadrado', 'retangulo', 'circulo', 'triangulo'];
+const MEIA = { quadrado: [80, 80], retangulo: [120, 70], circulo: [80, 80], triangulo: [95, 82] };  // meia largura, meia altura
+let cor = CORES[0];
+let tam = TAMANHOS[1];
+let cameraVisivel = true;
+let itens = [];                     // traços {tipo:'traco', cor, tam, pontos} e formas {tipo, x, y, cor, tam, rot, esc}
+let novasFormas = 0;
+let maos = [];                      // uma entrada por mão acompanhada (até duas)
+
+// ---------- botões do painel ----------
+const botoes = [];
+const col = i => PAINEL.x + 10 + (i % 4) * (BW + VAO), lin = (y0, i) => PAINEL.y + y0 + Math.floor(i / 4) * (BH + VAO);
+const ROTULOS = [['Cor', 24], ['Traço', 146], ['Formas', 217], ['Lousa', 288]];     // texto e altura dentro do painel
+CORES.forEach((c, i) => botoes.push({ tipo: 'cor', valor: c, x: col(i), y: lin(30, i), w: BW, h: BH }));
+TAMANHOS.forEach((t, i) => botoes.push({ tipo: 'tam', valor: t, x: col(i), y: lin(152, i), w: BW, h: BH }));
+FORMAS.forEach((f, i) => botoes.push({ tipo: 'forma', valor: f, x: col(i), y: lin(223, i), w: BW, h: BH }));
+botoes.push({ tipo: 'limpar', x: col(0), y: lin(294, 0), w: BW, h: BH });
+botoes.push({ tipo: 'camera', x: col(1), y: lin(294, 0), w: BW, h: BH });
+
+function botaoEm(x, y) {
+  return botoes.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
+}
+
+function limpar() {
+  itens = []; novasFormas = 0;
+  for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.agarrada = null; m.giro = null; m.redim = null; m.querTam = null; }
+}
+
+function clicar(x, y) {
+  x = Math.round(x); y = Math.round(y);
+  const b = botaoEm(x, y);
+  el('clique').textContent = x + ', ' + y + (b ? ' → ' + (b.valor && b.tipo !== 'cor' ? b.valor : b.tipo) : ' → nada');
+  if (!b) return;
+  if (b.tipo === 'cor') cor = b.valor;
+  else if (b.tipo === 'tam') tam = b.valor;
+  else if (b.tipo === 'forma') {
+    const desloc = (novasFormas++ % 6) * 28;      // cada nova forma nasce um pouco deslocada da anterior
+    itens.push({ tipo: b.valor, x: (PAINEL.x + PAINEL.w + W) / 2 - 70 + desloc, y: H / 2 - 70 + desloc, cor, tam, rot: 0, esc: 1 });
+  }
+  else if (b.tipo === 'limpar') limpar();
+  else if (b.tipo === 'camera') cameraVisivel = !cameraVisivel;
+  b.piscaAte = performance.now() + 220;
+}
+
+// ---------- suavização (filtro One Euro): firme quando a mão está lenta, ágil quando está rápida ----------
+class Suave {
+  constructor(corteMin = 1.2, beta = 0.02) { this.corteMin = corteMin; this.beta = beta; this.t = null; }
+  reiniciar() { this.t = null; }
+  passo(v, t) {
+    if (this.t === null) { this.t = t; this.v = v; this.dv = 0; return v; }
+    const dt = Math.max((t - this.t) / 1000, 0.001); this.t = t;
+    const alfa = corte => { const r = 2 * Math.PI * corte * dt; return r / (r + 1); };
+    this.dv += alfa(1) * ((v - this.v) / dt - this.dv);
+    this.v += alfa(this.corteMin + this.beta * Math.abs(this.dv)) * (v - this.v);
+    return this.v;
+  }
+}
+
+// ---------- estado de cada mão ----------
+class Mao {
+  constructor() {
+    this.fx = new Suave(); this.fy = new Suave();       // ponta do indicador
+    this.gx = new Suave(); this.gy = new Suave();       // ponto da pinça
+    this.bx = new Suave(); this.by = new Suave();       // borracha
+    this.fe = new Suave(2.5, 1.5);                      // abertura polegar-indicador
+    this.fr = new Suave(2.5, 1.5);                      // ângulo, em radianos
+    this.lm = null;                 // 21 pontos em coordenadas da lousa, ou null se sumiu neste quadro
+    this.punho = [0, 0];
+    this.dedos = null;
+    this.ponta = null; this.pontoPinca = null;
+    this.palmaCima = false;
+    this.pinca = false; this.agarrada = null; this.agX = 0; this.agY = 0;
+    this.soltouEm = 0;
+    this.redim = null;              // {forma, base, a0, hist, invalido} enquanto a forma muda de tamanho
+    this.querTam = null;            // {forma, t}: gesto de tamanho sobre uma forma, esperando firmar
+    this.bloqueioTam = false;       // depois de travar fechando a pinça, só recomeça ao desfazer o gesto
+    this.giro = null;               // {forma, rot0, acum, angAnt, perdido}
+    this.pontoGiro = null;
+    this.modoDoisDedos = null;      // 'giro' ou 'borracha'
+    this.borracha = null;
+    this.tracoAtual = null; this.pendentes = []; this.inicioPausa = 0; this.querDesde = 0;
+    this.historico = []; this.ultimoApontar = 0; this.podeClicar = false;
+    this.travaDesde = 0; this.travada = false;          // mindinho para fora: a mão não faz nada
+    this.limparDesde = 0; this.limpou = false;
+    this.semDesde = 0;
+    this.leitura = '';
+  }
+  soltar(agora) { if (this.pinca) this.soltouEm = agora; this.pinca = false; this.agarrada = null; }
+  largarTudo(agora) {              // a mão sumiu de verdade: tudo fica como está
+    this.soltar(agora); this.giro = null; this.redim = null; this.querTam = null; this.modoDoisDedos = null;
+    this.tracoAtual = null; this.pendentes = []; this.ponta = null; this.pontoPinca = null;
+    for (const f of [this.fx, this.fy, this.gx, this.gy, this.bx, this.by, this.fe, this.fr]) f.reiniciar();
+  }
+}
+
+// ---------- rastreamento ----------
+let detector = null;
+let ultimoTempo = -1;
+
+function aviso(texto, mostrarBotao) {
+  el('status').hidden = false;
+  el('msg').textContent = texto;
+  el('abrir').hidden = !mostrarBotao;
+}
+
+async function carregarDetector() {
+  const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  detector = await HandLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" },
+    runningMode: "VIDEO",
+    numHands: 2
+  });
+}
+
+async function abrirCamera() {
+  aviso('Abrindo a câmera…', false);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+    el('status').hidden = true;
+    requestAnimationFrame(quadro);
+  } catch (e) {
+    const negado = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    aviso(negado ? 'A câmera foi bloqueada. Libere o acesso no navegador e tente de novo.'
+                 : 'Não consegui abrir a câmera (' + (e && e.name || 'erro') + '). Verifique se outra janela está usando a webcam.', true);
+  }
+}
+
+// O rastreador devolve as mãos em qualquer ordem: cada detecção vai para a mão conhecida mais próxima
+function atribuirMaos(deteccoes, agora) {
+  const pares = [];
+  deteccoes.forEach((lm, i) => maos.forEach(m => pares.push({ d: dist(lm[0], m.punho), i, m })));
+  pares.sort((a, b) => a.d - b.d);
+  const usadas = new Set(), vistas = new Set();
+  for (const p of pares) {
+    if (usadas.has(p.i) || vistas.has(p.m) || p.d > 350) continue;
+    usadas.add(p.i); vistas.add(p.m); p.m.lm = deteccoes[p.i];
+  }
+  deteccoes.forEach((lm, i) => {
+    if (usadas.has(i)) return;
+    const m = new Mao(); m.lm = lm; m.punho = lm[0]; maos.push(m); vistas.add(m);
+  });
+  for (const m of maos) if (!vistas.has(m)) m.lm = null;
+  for (const m of maos) processarMao(m, agora);
+  maos = maos.filter(m => m.lm || agora - m.semDesde <= 300);
+}
+
+// Mesma saída do detector.fingersUp do cvzone, mas medida em relação ao punho e à palma,
+// para funcionar com a mão em qualquer ângulo (em pé, deitada, inclinada)
+function dedosLevantados(lm) {
+  const palma = dist(lm[0], lm[9]) || 1;
+  const r = [];
+  r.push(dist(lm[4], lm[5]) > POLEGAR_ABERTO * palma ? 1 : 0);              // polegar afastado da base do indicador
+  for (const p of [8, 12, 16, 20]) r.push(dist(lm[p], lm[0]) > dist(lm[p - 2], lm[0]) ? 1 : 0);   // ponta mais longe do punho que a articulação
+  return r;
+}
+
+// Palma para cima ou para baixo, com a mão deitada: com a palma para cima o polegar fica por cima do indicador;
+// com a palma para baixo, por baixo. Positivo = polegar acima (na tela, y cresce para baixo).
+function inclinacaoPalma(lm, palma) {
+  return ((lm[5][1] + lm[6][1]) - (lm[3][1] + lm[4][1])) / 2 / palma;
+}
+
+function formaEm(x, y) {
+  for (let i = itens.length - 1; i >= 0; i--) {
+    const f = itens[i];
+    if (f.tipo === 'traco') continue;
+    const [mw, mh] = MEIA[f.tipo];
+    const r = -(f.rot || 0), e = f.esc || 1, dx = x - f.x, dy = y - f.y;     // traz o ponto para o referencial da forma girada
+    const lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r);
+    if (Math.abs(lx) <= mw * e + 25 && Math.abs(ly) <= mh * e + 25) return f;
+  }
+  return null;
+}
+const paraFrente = f => { itens.splice(itens.indexOf(f), 1); itens.push(f); };
+const outraMaoTem = (m, campo, f) => maos.some(o => o !== m && (campo === 'agarrada' ? o.agarrada === f : o[campo] && o[campo].forma === f));
+
+// Interrompe o traço só se a falha durar; falhas curtas são costuradas
+function pausarTraco(m, agora, pontoProvisorio, imediato) {
+  if (!m.tracoAtual) return;
+  if (!m.inicioPausa) m.inicioPausa = agora;
+  if (imediato || agora - m.inicioPausa > TOLERANCIA_TRACO) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; }
+  else if (pontoProvisorio) m.pendentes.push(pontoProvisorio);
+}
+
+function distSegmento(p, a, b) {
+  const vx = b[0] - a[0], vy = b[1] - a[1], c = vx * vx + vy * vy;
+  const t = c ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / c)) : 0;
+  return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy);
+}
+
+// Apaga a parte dos traços que a borracha toca, dividindo o traço em pedaços
+function apagar(c) {
+  const novo = [];
+  for (const it of itens) {
+    if (it.tipo !== 'traco') { novo.push(it); continue; }
+    let pedaco = [], mudou = false;
+    const pedacos = [];
+    const fechar = () => { if (pedaco.length) pedacos.push(pedaco); pedaco = []; };
+    for (const p of it.pontos) {
+      if (dist(p, c) < RAIO_BORRACHA + it.tam / 2) { fechar(); mudou = true; continue; }
+      if (pedaco.length && distSegmento(c, pedaco[pedaco.length - 1], p) < RAIO_BORRACHA) { fechar(); mudou = true; }
+      pedaco.push(p);
+    }
+    fechar();
+    if (!mudou) { novo.push(it); continue; }
+    // o traço foi cortado: quem estava desenhando nele para, em vez de continuar num traço que não existe mais
+    for (const m of maos) if (m.tracoAtual === it) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; }
+    for (const pts of pedacos) novo.push({ tipo: 'traco', cor: it.cor, tam: it.tam, pontos: pts });
+  }
+  itens = novo;
+}
+
+function processarMao(m, agora) {
+  m.borracha = null; m.pontoGiro = null;
+  const lm = m.lm;
+  if (!lm) {
+    m.dedos = null; m.querDesde = 0; m.leitura = ''; m.travada = false; m.travaDesde = 0; m.limparDesde = 0;
+    if (!m.semDesde) m.semDesde = agora;
+    pausarTraco(m, agora, null, false);
+    if (agora - m.semDesde > 300) m.largarTudo(agora);
+    return;
+  }
+  m.semDesde = 0; m.punho = lm[0];
+  m.dedos = dedosLevantados(lm);
+  const dedos = m.dedos, d = dedos.join('');
+  const outros = d.slice(1);                    // indicador, médio, anelar, mínimo (sem o polegar)
+  if (d !== '01000') m.querDesde = 0;
+  const x = m.fx.passo(lm[8][0], agora), y = m.fy.passo(lm[8][1], agora);
+  m.ponta = [x, y];
+  const pm = meio(lm[4], lm[8]);
+  const px = m.gx.passo(pm[0], agora), py = m.gy.passo(pm[1], agora);
+  m.pontoPinca = [px, py];
+
+  const palma = dist(lm[0], lm[9]) || 1;
+  const abertura = dist(lm[4], lm[8]) / palma;
+  const dobra = dist(lm[8], lm[5]) / palma;
+  const afast = dist(lm[8], lm[12]) / palma;
+  const afast2 = dist(lm[12], lm[16]) / palma;
+  const inclin = inclinacaoPalma(lm, palma);
+  if (inclin > PALMA_CIMA) m.palmaCima = true; else if (inclin < PALMA_BAIXO) m.palmaCima = false;
+  m.leitura = '[' + dedos.join(',') + ']  pinça ' + abertura.toFixed(2) + (m.pinca ? ' (fechada)' : '') + '  dobra ' + dobra.toFixed(2)
+            + '\n   ind-médio ' + afast.toFixed(2) + '  méd-anelar ' + afast2.toFixed(2) + '  palma ' + (m.palmaCima ? 'cima' : 'baixo') + ' (' + inclin.toFixed(2) + ')'
+            + (m.travada ? '  TRAVADA' : '');
+
+  // ---- limpar tudo: indicador + médio + anelar erguidos e colados, polegar e mindinho dobrados, parados por um instante ----
+  const querLimpar = d === '01110' && afast < LIMPAR_JUNTOS && afast2 < LIMPAR_JUNTOS;
+  if (!querLimpar) { m.limparDesde = 0; m.limpou = false; }
+
+  // ---- trava: com o mindinho para fora, a mão solta o que estiver fazendo e não faz mais nada ----
+  if (dedos[4] === 1) { if (!m.travaDesde) m.travaDesde = agora; } else { m.travaDesde = 0; m.travada = false; }
+  if (m.travaDesde && agora - m.travaDesde >= FIRMEZA_TRAVA) {
+    m.travada = true;
+    m.soltar(agora);                            // a forma arrastada fica onde está
+    if (m.redim) {                              // o tamanho fica como estava um instante antes de o mindinho sair
+      const antes = m.redim.hist.find(h => h.t >= m.travaDesde - 150);
+      if (antes) m.redim.forma.esc = antes.e;
+      m.redim = null;
+    }
+    m.giro = null; m.querTam = null; m.modoDoisDedos = null;
+    m.podeClicar = false; m.querDesde = 0;
+    pausarTraco(m, agora, null, true);
+    return;
+  }
+
+  // ---- pinça, palma para baixo: arrastar a forma ----
+  if (!m.pinca && !m.redim && !m.palmaCima && abertura < PINCA_FECHA && dobra > DOBRA_MAXIMA) {
+    m.pinca = true;
+    const f = formaEm(px, py);
+    m.agarrada = f && !outraMaoTem(m, 'agarrada', f) ? f : null;
+    if (m.agarrada) { m.agX = f.x - px; m.agY = f.y - py; paraFrente(f); }
+  } else if (m.pinca && abertura > PINCA_ABRE) {
+    m.soltar(agora);                            // a forma fica onde está
+  }
+  if (m.pinca) {
+    if (m.agarrada) {
+      m.agarrada.x = Math.min(W - 20, Math.max(20, px + m.agX));
+      m.agarrada.y = Math.min(H - 20, Math.max(20, py + m.agY));
+    }
+    pausarTraco(m, agora, null, true);
+    m.podeClicar = false;
+    return;
+  }
+
+  // ---- tamanho, palma para cima: a forma cresce e encolhe com a abertura entre polegar e indicador ----
+  const posturaTam = m.palmaCima && outros.slice(1) === '000';     // médio, anelar e mínimo fechados
+  if (!posturaTam) { m.bloqueioTam = false; m.querTam = null; }
+  if (m.redim) {
+    const r = m.redim;
+    if (posturaTam) {
+      r.invalido = 0;
+      const a = m.fe.passo(abertura, agora);
+      const razao = Math.max(a, PISO_ABERTURA) / Math.max(r.a0, PISO_ABERTURA);   // vale 1 na abertura em que o gesto começou
+      r.forma.esc = Math.max(ESCALA_MIN, Math.min(ESCALA_MAX, r.base * razao));
+      r.hist.push({ t: agora, e: r.forma.esc });
+      r.hist = r.hist.filter(h => agora - h.t < 500);
+      if (r.a0 > COMECOU_ABERTO && a < PINCA_FECHA) {      // começou aberto e fechou a pinça: fim do diminuir, o tamanho fica
+        m.redim = null; m.bloqueioTam = true; m.soltouEm = agora;
+      }
+    } else {
+      // o gesto foi desfeito (abriu a mão, virou a palma): trava no tamanho de pouco antes de desfazer
+      if (!r.invalido) r.invalido = agora;
+      if (agora - r.invalido > 150) {
+        const antes = r.hist.find(h => h.t >= r.invalido - 150);
+        if (antes) r.forma.esc = antes.e;
+        m.redim = null; m.soltouEm = agora;
+      }
+    }
+    if (m.redim) { pausarTraco(m, agora, null, true); m.podeClicar = false; return; }
+  } else if (posturaTam && !m.bloqueioTam) {
+    const f = formaEm(px, py);
+    if (!f || outraMaoTem(m, 'redim', f)) m.querTam = null;
+    else if (!m.querTam || m.querTam.forma !== f) m.querTam = { forma: f, t: agora };
+    else if (agora - m.querTam.t > FIRMEZA_TAMANHO) {
+      m.fe.reiniciar();
+      m.redim = { forma: f, base: f.esc || 1, a0: m.fe.passo(abertura, agora), hist: [], invalido: 0 };
+      paraFrente(f);
+      m.querTam = null;
+      pausarTraco(m, agora, null, true);
+      m.podeClicar = false;
+      return;
+    }
+  }
+
+  if (agora - m.soltouEm < ESPERA_APOS_SOLTAR) {  // a mão ainda está se abrindo: não desenha, não apaga, não clica
+    pausarTraco(m, agora, null, true);
+    m.querDesde = 0;
+    return;
+  }
+
+  // ---- indicador + médio erguidos: juntos = borracha, afastados em V = girar ----
+  // Entre os dois limites vale o modo que já estava ativo; no primeiro quadro, o polegar desempata.
+  if (outros === '1100') {
+    if (afast > DEDOS_ABERTOS) m.modoDoisDedos = 'giro';
+    else if (afast < DEDOS_JUNTOS) m.modoDoisDedos = 'borracha';
+    else if (!m.modoDoisDedos) m.modoDoisDedos = dedos[0] ? 'giro' : 'borracha';
+  } else {
+    m.modoDoisDedos = null;
+  }
+
+  // ---- girar: a forma acompanha o ângulo da mão ----
+  if (m.modoDoisDedos === 'giro') {
+    const ang = Math.atan2(lm[9][1] - lm[0][1], lm[9][0] - lm[0][0]);        // direção punho -> base do dedo médio
+    const pg = meio(lm[8], lm[12]);
+    if (!m.giro) m.giro = { forma: null, rot0: 0, acum: 0, angAnt: ang, perdido: 0 };
+    const g = m.giro;
+    if (!g.forma) {                             // pega a forma sob os dedos ou sob a palma
+      const f = formaEm(pg[0], pg[1]) || formaEm(lm[9][0], lm[9][1]);
+      if (f && !outraMaoTem(m, 'giro', f)) { g.forma = f; g.rot0 = f.rot || 0; g.acum = 0; m.fr.reiniciar(); paraFrente(f); }
+    }
+    let dif = ang - g.angAnt;
+    dif = Math.atan2(Math.sin(dif), Math.cos(dif));                          // menor diferença entre os dois ângulos
+    g.acum += dif; g.angAnt = ang; g.perdido = 0;
+    if (g.forma) g.forma.rot = g.rot0 + m.fr.passo(g.acum, agora);
+    m.pontoGiro = pg;
+    pausarTraco(m, agora, null, true);
+    m.podeClicar = false;
+    return;
+  }
+  if (m.giro) {                                 // tolera falhas curtas de leitura sem soltar a forma
+    if (!m.giro.perdido) m.giro.perdido = agora;
+    if (agora - m.giro.perdido > 200) m.giro = null;
+    else { pausarTraco(m, agora, null, true); return; }
+  }
+
+  // ---- apontar e clicar ----
+  if (outros === '1000') {
+    m.historico.push({ t: agora, x, y });
+    m.historico = m.historico.filter(p => agora - p.t < 600);
+    m.ultimoApontar = agora;
+    m.podeClicar = true;
+  }
+  if (outros === '0000' && m.podeClicar && agora - m.ultimoApontar < 300) {
+    const alvo = m.historico.find(p => p.t >= m.ultimoApontar - JANELA_CLIQUE);
+    if (alvo) clicar(alvo.x, alvo.y);
+    m.podeClicar = false;
+  }
+
+  // ---- borracha ----
+  if (m.modoDoisDedos === 'borracha') {
+    const pb = meio(lm[8], lm[12]);
+    m.borracha = [m.bx.passo(pb[0], agora), m.by.passo(pb[1], agora)];
+    pausarTraco(m, agora, null, true);
+    m.podeClicar = false;
+    apagar(m.borracha);
+    return;
+  }
+
+  // ---- desenhar ----
+  if (d === '01000' && !noPainel(x, y)) {
+    if (!m.tracoAtual) {
+      // espera o gesto firmar por 80 ms, para não deixar um ponto solto ao passar por ele
+      if (!m.querDesde) m.querDesde = agora;
+      if (agora - m.querDesde < 80) return;
+      m.tracoAtual = { tipo: 'traco', cor, tam, pontos: [] }; itens.push(m.tracoAtual);
+    }
+    if (m.pendentes.length) { m.tracoAtual.pontos.push(...m.pendentes); m.pendentes = []; }
+    m.inicioPausa = 0;
+    const pts = m.tracoAtual.pontos, ult = pts[pts.length - 1];
+    if (!ult || dist(ult, [x, y]) >= 1.5) pts.push([x, y]);
+  } else {
+    // Dedo ainda erguido (ex.: polegar lido errado por um quadro): guarda o ponto provisoriamente
+    pausarTraco(m, agora, dedos[1] === 1 && !noPainel(x, y) ? [x, y] : null, noPainel(x, y));
+  }
+
+  if (querLimpar && !m.limpou) {
+    if (!m.limparDesde) m.limparDesde = agora;
+    if (agora - m.limparDesde >= FIRMEZA_LIMPAR) { limpar(); m.limpou = true; }   // só apaga de novo depois de desfazer o gesto
+  }
+}
+
+// ---------- desenho da tela ----------
+function retArred(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function caminhoForma(tipo, x, y, k) {
+  const [mw, mh] = MEIA[tipo];
+  ctx.beginPath();
+  if (tipo === 'circulo') ctx.arc(x, y, mw * k, 0, Math.PI * 2);
+  else if (tipo === 'triangulo') { ctx.moveTo(x, y - mh * k); ctx.lineTo(x + mw * k, y + mh * k); ctx.lineTo(x - mw * k, y + mh * k); ctx.closePath(); }
+  else ctx.rect(x - mw * k, y - mh * k, mw * 2 * k, mh * 2 * k);
+}
+
+function desenharTraco(t) {
+  const p = t.pontos;
+  if (!p.length) return;
+  ctx.strokeStyle = t.cor; ctx.fillStyle = t.cor; ctx.lineWidth = t.tam;
+  if (p.length === 1) { ctx.beginPath(); ctx.arc(p[0][0], p[0][1], t.tam / 2, 0, Math.PI * 2); ctx.fill(); return; }
+  // Curvas passando pelos pontos médios: o traço sai arredondado em vez de em segmentos retos
+  ctx.beginPath();
+  ctx.moveTo(p[0][0], p[0][1]);
+  for (let i = 1; i < p.length - 1; i++) {
+    ctx.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2);
+  }
+  ctx.lineTo(p[p.length - 1][0], p[p.length - 1][1]);
+  ctx.stroke();
+}
+
+const presa = it => maos.some(m => m.agarrada === it || (m.giro && m.giro.forma === it) || (m.redim && m.redim.forma === it));
+
+function desenharItens() {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const it of itens) {
+    if (it.tipo === 'traco') { desenharTraco(it); continue; }
+    ctx.save();
+    const e = it.esc || 1;
+    ctx.translate(it.x, it.y); ctx.rotate(it.rot || 0); ctx.scale(e, e);
+    caminhoForma(it.tipo, 0, 0, 1);
+    ctx.globalAlpha = 0.16; ctx.fillStyle = it.cor; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = it.cor; ctx.lineWidth = it.tam / e; ctx.stroke();      // a espessura do contorno não cresce junto
+    if (presa(it)) {                             // moldura tracejada enquanto está presa a uma mão
+      const [mw, mh] = MEIA[it.tipo], mg = 14 / e;
+      ctx.setLineDash([10 / e, 8 / e]); ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 3 / e;
+      ctx.strokeRect(-mw - mg, -mh - mg, (mw + mg) * 2, (mh + mg) * 2);
+    }
+    ctx.restore();
+  }
+}
+
+function desenharPainel(agora, sobre) {
+  retArred(PAINEL.x, PAINEL.y, PAINEL.w, PAINEL.h, 12);
+  ctx.fillStyle = '#e4e6ec'; ctx.fill();
+  ctx.strokeStyle = '#c9ccd6'; ctx.lineWidth = 2; ctx.stroke();
+
+  ctx.fillStyle = '#4a5060'; ctx.font = '600 13px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  for (const [texto, dy] of ROTULOS) ctx.fillText(texto, PAINEL.x + 10, PAINEL.y + dy);
+
+  for (const b of botoes) {
+    const selecionado = (b.tipo === 'cor' && b.valor === cor) || (b.tipo === 'tam' && b.valor === tam) || (b.tipo === 'camera' && cameraVisivel);
+    const piscando = b.piscaAte && agora < b.piscaAte;
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+
+    retArred(b.x, b.y, b.w, b.h, 8);
+    ctx.fillStyle = b.tipo === 'cor' ? b.valor : (piscando ? '#b9c4ff' : '#ffffff');
+    ctx.fill();
+
+    if (b.tipo === 'tam') {
+      ctx.fillStyle = '#111111'; ctx.beginPath(); ctx.arc(cx, cy, b.valor / 2 + 1, 0, Math.PI * 2); ctx.fill();
+    } else if (b.tipo === 'forma') {
+      caminhoForma(b.valor, cx, cy, 0.17);
+      ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+    } else if (b.tipo === 'limpar' || b.tipo === 'camera') {
+      ctx.fillStyle = '#111111'; ctx.font = '600 13px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(b.tipo === 'limpar' ? 'Limpar' : 'Câmera', cx, cy);
+    }
+
+    retArred(b.x, b.y, b.w, b.h, 8);
+    if (selecionado) { ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 4; }
+    else if (sobre.has(b)) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 3; }
+    else { ctx.strokeStyle = '#b4b8c4'; ctx.lineWidth = 2; }
+    ctx.stroke();
+    if (selecionado && b.tipo === 'cor') {
+      retArred(b.x + 4, b.y + 4, b.w - 8, b.h - 8, 5);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+}
+
+function anel(x, y, r) {
+  ctx.beginPath(); ctx.arc(x, y, r + 3, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = '#111111'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+}
+function bolinha(p, r, corFundo) { ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, Math.PI * 2); ctx.fillStyle = corFundo; ctx.fill(); }
+
+const apontando = m => m.lm && m.dedos && m.ponta && !m.travada && !m.pinca && !m.redim && m.dedos.slice(1).join('') === '1000';
+
+function desenharCursor(m) {
+  const lm = m.lm;
+  if (!lm || !m.dedos || !m.ponta) return;
+  if (m.travada) {                              // sinal de travada: disco cinza com uma barra, sobre a palma
+    bolinha(lm[9], 13, '#8a8f9c');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(lm[9][0] - 8, lm[9][1] - 2.5, 16, 5);
+    return;
+  }
+  if (m.pinca) {
+    anel(m.pontoPinca[0], m.pontoPinca[1], 12);
+    bolinha(m.pontoPinca, 7, m.agarrada ? '#1f5fe0' : '#8a8f9c');
+    return;
+  }
+  if (m.redim) {                                // linha entre polegar e indicador: é ela que dá o tamanho
+    ctx.beginPath(); ctx.moveTo(lm[4][0], lm[4][1]); ctx.lineTo(lm[8][0], lm[8][1]);
+    ctx.lineWidth = 3; ctx.strokeStyle = '#1f5fe0'; ctx.stroke();
+    bolinha(lm[4], 7, '#1f5fe0'); bolinha(lm[8], 7, '#1f5fe0');
+    return;
+  }
+  if (m.pontoGiro) {
+    anel(m.pontoGiro[0], m.pontoGiro[1], 12);
+    bolinha(m.pontoGiro, 7, m.giro && m.giro.forma ? '#1f5fe0' : '#8a8f9c');
+    return;
+  }
+  if (m.borracha) {
+    ctx.beginPath(); ctx.arc(m.borracha[0], m.borracha[1], RAIO_BORRACHA, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fill();
+    ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = '#111111'; ctx.stroke(); ctx.setLineDash([]);
+    return;
+  }
+  if (!apontando(m)) return;
+  const [x, y] = m.ponta;
+  anel(x, y, Math.max(tam / 2, 6) + 3);
+  if (m.dedos[0] === 0 && !noPainel(x, y)) bolinha(m.ponta, Math.max(tam / 2, 3), cor);
+}
+
+function quadro() {
+  requestAnimationFrame(quadro);
+  if (video.readyState < 2) return;
+  const agora = performance.now();
+
+  if (video.currentTime !== ultimoTempo) {
+    ultimoTempo = video.currentTime;
+    const res = detector.detectForVideo(video, agora);
+    const deteccoes = (res.landmarks || []).map(mao => mao.map(p => [(1 - p.x) * W, p.y * H]));
+    atribuirMaos(deteccoes, agora);
+    const linhas = maos.filter(m => m.lm).sort((a, b) => a.punho[0] - b.punho[0]).map((m, i) => 'mão ' + (i + 1) + ': ' + m.leitura);
+    el('leitura').textContent = linhas.length ? linhas.join('\n') : 'sem mão';
+  }
+
+  // A tela tem 1920x1080 pixels reais; tudo é desenhado em coordenadas 1280x720
+  ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#fbfbf8';
+  ctx.fillRect(0, 0, W, H);
+  if (cameraVisivel) {
+    ctx.save(); ctx.globalAlpha = 0.9; ctx.scale(-1, 1); ctx.drawImage(video, -W, 0, W, H); ctx.restore();
+  }
+  desenharItens();
+
+  const sobre = new Set();
+  for (const m of maos) if (apontando(m)) { const b = botaoEm(m.ponta[0], m.ponta[1]); if (b) sobre.add(b); }
+  desenharPainel(agora, sobre);
+  for (const m of maos) desenharCursor(m);
+}
+
+// ---------- mouse e teclado ----------
+tela.addEventListener('pointerdown', e => {      // o mouse também clica nos botões
+  const r = tela.getBoundingClientRect();
+  clicar((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
+});
+function telaCheia() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
+el('btCheia').addEventListener('click', telaCheia);
+el('btAjuda').addEventListener('click', () => { el('ajuda').hidden = !el('ajuda').hidden; });
+addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') telaCheia(); });
+el('abrir').addEventListener('click', abrirCamera);
+
+try {
+  await carregarDetector();
+  await abrirCamera();
+} catch (e) {
+  aviso('Não consegui carregar o rastreador de mãos. Verifique a conexão com a internet e recarregue a página.', false);
+}
+</script>
+</body>
+</html>
