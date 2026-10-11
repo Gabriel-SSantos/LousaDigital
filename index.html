@@ -2,24 +2,39 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Quadro no Ar</title>
 <style>
   :root { color-scheme: dark; }
-  html, body { height: 100%; }
-  body { margin: 0; overflow: hidden; background: #0e1016; color: #eceef4; font-family: system-ui, sans-serif; font-size: 15px; }
-  .stage { position: fixed; inset: 0; display: grid; place-items: center; }
-  /* A lousa ocupa o máximo da janela mantendo 16:9 */
-  canvas { display: block; width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16)); background: #fbfbf8; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  body { margin: 0; overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; background: #0e1016; color: #eceef4; font-family: system-ui, sans-serif; font-size: 15px; }
+  /* Camadas, de baixo para cima: fundo branco, câmera, página enviada, lousa (traços, formas, painel, cursores).
+     A câmera e a página são exibidas pelo próprio navegador; a lousa só redesenha o que muda. */
+  .stage { position: fixed; inset: 0; background: #fbfbf8; overflow: hidden; }
+  #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); pointer-events: none; }
+  #camadaPagina { position: absolute; inset: 0; pointer-events: none; }
+  #camadaPagina canvas { object-fit: contain; }
+  #tela { position: absolute; inset: 0; }
+  /* A lousa ocupa a janela inteira, em qualquer formato: deitada, em pé, celular ou computador */
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   #status { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; text-align: center; padding: 16px; color: #aeb5c6; background: #0e1016; }
   #status[hidden], #ajuda[hidden] { display: none; }
   button { font: inherit; font-weight: 600; border: 0; border-radius: 4px; padding: 8px 14px; cursor: pointer; }
   #abrir { background: #8fa4ff; color: #0e1016; }
-  .barra { position: fixed; top: 10px; right: 10px; display: flex; gap: 8px; }
-  .barra button { background: rgba(20, 23, 32, 0.82); color: #eceef4; }
-  #ajuda { position: fixed; top: 54px; right: 10px; width: min(400px, calc(100vw - 20px)); max-height: calc(100vh - 64px); overflow-y: auto; box-sizing: border-box; background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 14px 16px; line-height: 1.55; }
+  .barra { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); left: calc(10px + env(safe-area-inset-left, 0px));
+           display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; pointer-events: none; }
+  .barra button, .barra span { pointer-events: auto; background: rgba(20, 23, 32, 0.82); color: #eceef4; }
+  .barra span { border-radius: 4px; padding: 8px 10px; font-variant-numeric: tabular-nums; }
+  .barra [hidden] { display: none; }
+  #recado { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); max-width: min(520px, calc(100vw - 20px)); box-sizing: border-box;
+            background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 10px 14px; line-height: 1.45; white-space: pre-line; }
+  #recado[hidden] { display: none; }
+  #ajuda { position: fixed; top: calc(58px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: min(400px, calc(100vw - 20px)); max-height: calc(100vh - 70px); max-height: calc(100dvh - 70px - env(safe-area-inset-top, 0px)); overflow-y: auto; box-sizing: border-box; background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 14px 16px; line-height: 1.55; }
   #ajuda ul { margin: 0 0 10px; padding-left: 18px; }
   #ajuda b { font-weight: 600; }
+  #ajuda button { background: #8fa4ff; color: #0e1016; }
   .readout { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; color: #9aa1b3; }
   .readout pre { margin: 0 0 4px; font: inherit; color: #eceef4; white-space: pre-wrap; }
   .readout b { color: #eceef4; }
@@ -27,7 +42,9 @@
 </head>
 <body>
 <div class="stage">
-  <canvas id="tela" width="1920" height="1080"></canvas>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="camadaPagina"></div>
+  <canvas id="tela" width="1280" height="720"></canvas>
   <div id="status">
     <span id="msg">Carregando o rastreador de mãos…</span>
     <button id="abrir" type="button" hidden>Abrir câmera</button>
@@ -35,13 +52,21 @@
 </div>
 
 <div class="barra">
+  <button id="btAnt" type="button" hidden aria-label="Página anterior">◀</button>
+  <span id="contador" hidden>1 / 1</span>
+  <button id="btProx" type="button" hidden aria-label="Próxima página">▶</button>
+  <button id="btFechar" type="button" hidden>Fechar slides</button>
+  <button id="btEnviar" type="button">Enviar arquivo</button>
   <button id="btAjuda" type="button">Ajuda</button>
-  <button id="btCheia" type="button">Tela cheia (F)</button>
+  <button id="btCheia" type="button">Tela cheia</button>
 </div>
 
 <div id="ajuda" hidden>
   <ul>
-    <li><b>Duas mãos:</b> todos os gestos valem para as duas, ao mesmo tempo.</li>
+    <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O que você desenha fica guardado na página em que foi feito.</li>
+    <li><b>Duas mãos:</b> todos os gestos valem para as duas, ao mesmo tempo. No celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
+    <li><b>Caneta e borracha:</b> começam desligadas. Ligue e desligue no botão do painel; desligadas, os gestos de desenhar, apagar e limpar tudo não fazem nada.</li>
+    <li><b>Sempre ativos:</b> clicar, mover forma (pinça), mudar o tamanho e girar.</li>
     <li><b>Desenhar:</b> só o indicador erguido, sobre a lousa.</li>
     <li><b>Clicar:</b> aponte para um botão e abaixe o indicador, fechando a mão.</li>
     <li><b>Borracha:</b> indicador + médio erguidos e colados; passe sobre o traço.</li>
@@ -52,21 +77,834 @@
     <li><b>Limpar tudo:</b> botão Limpar, ou indicador + médio + anelar erguidos e colados, com polegar e mindinho dobrados, parados por um instante.</li>
     <li><b>Trava:</b> com o mindinho para fora, a mão solta o que estiver fazendo e não faz nenhum gesto.</li>
   </ul>
+  <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
   <div class="readout">
+    <pre id="desempenho">—</pre>
     <pre id="leitura">sem mão</pre>
     <span>último clique = <b id="clique">—</b></span>
   </div>
 </div>
 
-<video id="video" autoplay playsinline muted hidden></video>
+<div id="recado" hidden></div>
+
+<!-- Módulo de upload: recebe .pptx e imagens e devolve páginas prontas para desenhar. Fica disponível como window.ModuloUpload. -->
+<script>
+/*
+ * Módulo de upload — recebe arquivos de imagem e de PowerPoint (.pptx) e devolve "páginas" prontas para desenhar.
+ *
+ * Uso mínimo:
+ *
+ *   ModuloUpload.ligar({
+ *     botao: document.getElementById('enviar'),      // abre o seletor de arquivos ao ser clicado
+ *     areaDeSoltar: document.body,                    // aceita arquivos arrastados para cá
+ *     aoProgresso: texto => { ... },                  // "aula.pptx: slide 3 de 12"
+ *     aoReceber: ({ paginas, recusados }) => { ... }
+ *   });
+ *
+ * Cada página: { nome, origem: 'imagem' | 'pptx', arquivo, indice, largura, altura, imagem, avisos }
+ *   imagem  -> um <canvas>, que serve direto em ctx.drawImage(pagina.imagem, ...)
+ *   avisos  -> lista de textos sobre o que não pôde ser desenhado naquele slide
+ * Cada recusado: { nome, motivo }
+ *
+ * Tudo acontece no navegador; nenhum arquivo é enviado para servidor.
+ *
+ * Sobre o .pptx: o navegador não sabe abrir PowerPoint, então este módulo lê o arquivo e redesenha cada slide.
+ * Saem textos, imagens, formas simples, tabelas e fundos. NÃO saem gráficos, SmartArt, animações, vídeos,
+ * sombras e efeitos. Para um slide idêntico ao original, exporte a apresentação como imagens e envie as imagens.
+ */
+(function (global) {
+  'use strict';
+
+  // ---------------------------------------------------------------------------------------------------------
+  // Configuração
+  // ---------------------------------------------------------------------------------------------------------
+  const URL_JSZIP = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';   // o .pptx é um arquivo zip
+  const EXT_IMAGEM = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'];
+  const ACEITA = ['.pptx'].concat(EXT_IMAGEM.map(e => '.' + e)).join(',');
+  const TAMANHO_MAXIMO = 80 * 1024 * 1024;      // 80 MB por arquivo
+  const LADO_MAXIMO = 2560;                     // imagens maiores que isso são reduzidas, para poupar memória
+  // largura, em pixels, em que cada slide é desenhado; menor em celular e tablet, para poupar memória
+  const LARGURA_SLIDE = global.matchMedia && global.matchMedia('(pointer: coarse)').matches ? 1280 : 1600;
+
+  const extensao = nome => (/\.([a-z0-9]+)$/i.exec(nome || '') || [, ''])[1].toLowerCase();
+  const ordemNatural = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' }).compare;   // Slide2 antes de Slide10
+
+  function tipoDe(arquivo) {
+    const ext = extensao(arquivo.name);
+    if (ext === 'pptx') return 'pptx';
+    if (EXT_IMAGEM.includes(ext)) return 'imagem';
+    return null;
+  }
+
+  function motivoDaRecusa(arquivo) {
+    const ext = extensao(arquivo.name);
+    if (arquivo.size > TAMANHO_MAXIMO) return 'Arquivo maior que ' + Math.round(TAMANHO_MAXIMO / 1048576) + ' MB.';
+    if (arquivo.size === 0) return 'Arquivo vazio.';
+    if (ext === 'ppt' || ext === 'pps' || ext === 'ppsx' || ext === 'odp' || ext === 'key')
+      return 'Formato .' + ext + ' não é aceito. Abra no PowerPoint e salve como .pptx.';
+    if (ext === 'pdf') return 'PDF não é aceito. Envie o .pptx ou exporte as páginas como imagens.';
+    if (ext === 'heic' || ext === 'heif' || ext === 'tif' || ext === 'tiff')
+      return 'Imagem .' + ext + ' não abre no navegador. Converta para PNG ou JPG.';
+    if (!tipoDe(arquivo)) return 'Tipo de arquivo não aceito. Envie .pptx ou imagem (' + EXT_IMAGEM.join(', ') + ').';
+    return null;
+  }
+
+  function novoCanvas(l, a) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(l)); c.height = Math.max(1, Math.round(a));
+    return c;
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // Imagens
+  // ---------------------------------------------------------------------------------------------------------
+  function viaElementoImg(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob), img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('O navegador não conseguiu abrir a imagem.')); };
+      img.src = url;
+    });
+  }
+
+  async function decodificar(blob, ext) {
+    if (ext !== 'svg' && global.createImageBitmap) {
+      try { return await global.createImageBitmap(blob); } catch (e) { /* tenta pelo elemento <img> */ }
+    }
+    return viaElementoImg(blob);
+  }
+
+  async function lerImagem(arquivo) {
+    const fonte = await decodificar(arquivo, extensao(arquivo.name));
+    let l = fonte.naturalWidth || fonte.width, a = fonte.naturalHeight || fonte.height;
+    if (!l || !a) { l = 1280; a = 720; }                              // SVG sem medidas declaradas
+    const k = Math.min(1, LADO_MAXIMO / Math.max(l, a));
+    const canvas = novoCanvas(l * k, a * k);
+    canvas.getContext('2d').drawImage(fonte, 0, 0, canvas.width, canvas.height);
+    if (fonte.close) fonte.close();
+    return { nome: arquivo.name, origem: 'imagem', arquivo: arquivo.name, indice: 0, largura: canvas.width, altura: canvas.height, imagem: canvas, avisos: [] };
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // PowerPoint: leitura do pacote
+  // ---------------------------------------------------------------------------------------------------------
+  let promessaJSZip = null;
+  function carregarJSZip() {
+    if (global.JSZip) return Promise.resolve(global.JSZip);
+    if (!promessaJSZip) promessaJSZip = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = URL_JSZIP;
+      s.onload = () => resolve(global.JSZip);
+      s.onerror = () => { promessaJSZip = null; reject(new Error('Não consegui baixar o leitor de .pptx. Verifique a internet.')); };
+      document.head.appendChild(s);
+    });
+    return promessaJSZip;
+  }
+
+  // Ajudantes de XML que ignoram o prefixo (a:, p:, r:) e olham só o nome do elemento
+  const filhos = (el, nome) => el ? Array.from(el.children).filter(f => f.localName === nome) : [];
+  const filho = (el, nome) => el ? Array.from(el.children).find(f => f.localName === nome) || null : null;
+  const caminho = (el, ...nomes) => nomes.reduce((e, n) => filho(e, n), el);
+  const todos = (el, nome) => el ? Array.from(el.getElementsByTagNameNS('*', nome)) : [];
+  const num = (el, atributo, padrao) => (el && el.hasAttribute(atributo)) ? Number(el.getAttribute(atributo)) : padrao;
+  const idRel = (el, nome) => el ? (el.getAttribute('r:' + nome) || el.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', nome)) : null;
+
+  class Pacote {
+    constructor(zip) { this.zip = zip; this.xmls = new Map(); this.relacoes = new Map(); this.imagens = new Map(); }
+
+    async xml(arq) {
+      if (!this.xmls.has(arq)) {
+        const f = this.zip.file(arq);
+        this.xmls.set(arq, f ? new DOMParser().parseFromString(await f.async('string'), 'application/xml') : null);
+      }
+      return this.xmls.get(arq);
+    }
+
+    // Relações de um arquivo: id -> { tipo, alvo }, com o alvo já como caminho dentro do zip
+    async rels(arq) {
+      if (!this.relacoes.has(arq)) {
+        const i = arq.lastIndexOf('/'), pasta = arq.slice(0, i), doc = await this.xml(pasta + '/_rels/' + arq.slice(i + 1) + '.rels');
+        const mapa = new Map();
+        for (const r of todos(doc, 'Relationship')) {
+          if (r.getAttribute('TargetMode') === 'External') continue;
+          const alvo = r.getAttribute('Target') || '';
+          const partes = alvo.startsWith('/') ? [] : pasta.split('/');
+          for (const p of alvo.split('/')) { if (p === '..') partes.pop(); else if (p && p !== '.') partes.push(p); }
+          mapa.set(r.getAttribute('Id'), { tipo: (r.getAttribute('Type') || '').split('/').pop(), alvo: partes.join('/') });
+        }
+        this.relacoes.set(arq, mapa);
+      }
+      return this.relacoes.get(arq);
+    }
+
+    async alvoPorTipo(arq, tipo) {
+      for (const r of (await this.rels(arq)).values()) if (r.tipo === tipo) return r.alvo;
+      return null;
+    }
+
+    async imagem(arq) {
+      if (!this.imagens.has(arq)) {
+        let img = null;
+        const f = this.zip.file(arq), ext = extensao(arq);
+        const mime = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', svg: 'image/svg+xml' }[ext];
+        if (f && mime) {
+          try { img = await decodificar(new Blob([await f.async('arraybuffer')], { type: mime }), ext); } catch (e) { img = null; }
+        }
+        this.imagens.set(arq, img);
+      }
+      return this.imagens.get(arq);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // PowerPoint: cores
+  // ---------------------------------------------------------------------------------------------------------
+  const CORES_NOMEADAS = { black: '000000', white: 'FFFFFF', red: 'FF0000', green: '008000', blue: '0000FF', yellow: 'FFFF00', gray: '808080', grey: '808080',
+    orange: 'FFA500', purple: '800080', brown: 'A52A2A', pink: 'FFC0CB', cyan: '00FFFF', magenta: 'FF00FF', lightGray: 'D3D3D3', darkGray: 'A9A9A9', navy: '000080' };
+
+  function hexParaRgb(h) { h = (h || '000000').replace('#', ''); return { r: parseInt(h.slice(0, 2), 16) || 0, g: parseInt(h.slice(2, 4), 16) || 0, b: parseInt(h.slice(4, 6), 16) || 0, a: 1 }; }
+
+  function ajustarLuz(c, mod, off) {            // lumMod / lumOff: mexe na luminosidade, no espaço HSL
+    const r = c.r / 255, g = c.g / 255, b = c.b / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    let h = 0, s = 0, l = (mx + mn) / 2;
+    if (mx !== mn) {
+      const d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      h /= 6;
+    }
+    l = Math.max(0, Math.min(1, l * mod + off));
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    const t = x => { x = (x + 1) % 1; return x < 1 / 6 ? p + (q - p) * 6 * x : x < 1 / 2 ? q : x < 2 / 3 ? p + (q - p) * (2 / 3 - x) * 6 : p; };
+    return s === 0 ? { r: l * 255, g: l * 255, b: l * 255, a: c.a } : { r: t(h + 1 / 3) * 255, g: t(h) * 255, b: t(h - 1 / 3) * 255, a: c.a };
+  }
+
+  // tint e shade do PowerPoint misturam a cor com branco ou preto em luz linear, não nos valores de tela
+  const paraLinear = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const paraTela = v => 255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  function misturar(cor, quanto, alvo) {
+    const f = v => paraTela(paraLinear(v) * quanto + alvo * (1 - quanto));
+    return { r: f(cor.r), g: f(cor.g), b: f(cor.b), a: cor.a };
+  }
+
+  // Lê a cor descrita dentro de `no` (um solidFill, por exemplo). Devolve {r,g,b,a} ou null.
+  function lerCor(no, c) {
+    if (!no) return null;
+    const el = Array.from(no.children).find(e => /Clr$/.test(e.localName));
+    if (!el) return null;
+    let cor;
+    const val = el.getAttribute('val');
+    if (el.localName === 'srgbClr') cor = hexParaRgb(val);
+    else if (el.localName === 'schemeClr') {
+      const nome = c.mapaCores[val] || val;                           // bg1/tx1/bg2/tx2 passam pelo mapa do slide mestre
+      cor = hexParaRgb(c.tema.cores[nome] || (nome === 'lt1' ? 'FFFFFF' : '000000'));
+    }
+    else if (el.localName === 'sysClr') cor = hexParaRgb(el.getAttribute('lastClr') || (val === 'window' ? 'FFFFFF' : '000000'));
+    else if (el.localName === 'prstClr') cor = hexParaRgb(CORES_NOMEADAS[val] || '000000');
+    else if (el.localName === 'scrgbClr') cor = { r: num(el, 'r', 0) * 255 / 100000, g: num(el, 'g', 0) * 255 / 100000, b: num(el, 'b', 0) * 255 / 100000, a: 1 };
+    else return null;
+    for (const m of el.children) {
+      const v = num(m, 'val', 100000) / 100000;
+      if (m.localName === 'lumMod') cor = ajustarLuz(cor, v, 0);
+      else if (m.localName === 'lumOff') cor = ajustarLuz(cor, 1, v);
+      else if (m.localName === 'tint') cor = misturar(cor, v, 1);     // clareia em direção ao branco
+      else if (m.localName === 'shade') cor = misturar(cor, v, 0);    // escurece em direção ao preto
+      else if (m.localName === 'alpha') cor.a = v;
+    }
+    return cor;
+  }
+  const css = cor => 'rgba(' + Math.round(cor.r) + ',' + Math.round(cor.g) + ',' + Math.round(cor.b) + ',' + (cor.a == null ? 1 : cor.a) + ')';
+
+  // Preenchimento descrito em `no` (spPr, bgPr, tcPr...). null = não especificado aqui.
+  function lerPreenchimento(no, c) {
+    if (!no) return null;
+    for (const f of no.children) {
+      if (f.localName === 'noFill') return { tipo: 'nenhum' };
+      if (f.localName === 'solidFill') { const cor = lerCor(f, c); return cor ? { tipo: 'cor', cor } : null; }
+      if (f.localName === 'gradFill') {
+        const paradas = todos(f, 'gs').map(g => ({ pos: num(g, 'pos', 0) / 100000, cor: lerCor(g, c) })).filter(p => p.cor).sort((a, b) => a.pos - b.pos);
+        if (!paradas.length) return null;
+        const lin = filho(f, 'lin');
+        return { tipo: 'grad', paradas, angulo: num(lin, 'ang', 5400000) / 60000 };
+      }
+      if (f.localName === 'pattFill') { const cor = lerCor(filho(f, 'fgClr'), c); return cor ? { tipo: 'cor', cor } : null; }
+      if (f.localName === 'blipFill') return { tipo: 'imagem', rel: idRel(filho(f, 'blip'), 'embed') };
+    }
+    return null;
+  }
+
+  function estiloDePreenchimento(g, p, l, a) {
+    if (p.tipo === 'cor') return css(p.cor);
+    const rad = p.angulo * Math.PI / 180, dx = Math.cos(rad) * l / 2, dy = Math.sin(rad) * a / 2;
+    const grad = g.createLinearGradient(l / 2 - dx, a / 2 - dy, l / 2 + dx, a / 2 + dy);
+    for (const s of p.paradas) grad.addColorStop(Math.max(0, Math.min(1, s.pos)), css(s.cor));
+    return grad;
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // PowerPoint: formas
+  // ---------------------------------------------------------------------------------------------------------
+  // Traça o contorno de uma forma predefinida no retângulo (0, 0, l, a). Devolve false se não conhece a forma.
+  function tracarForma(g, prst, l, a, ajustes) {
+    const aj = (nome, padrao) => (nome in ajustes ? ajustes[nome] : padrao) / 100000;
+    g.beginPath();
+    switch (prst) {
+      case 'rect': case 'flowChartProcess': case 'snip1Rect': case 'snip2SameRect': case 'frame':
+        g.rect(0, 0, l, a); return true;
+      case 'roundRect': case 'round1Rect': case 'round2SameRect': case 'flowChartAlternateProcess': case 'flowChartTerminator': {
+        const r = Math.min(l, a) * (prst === 'flowChartTerminator' ? 0.5 : aj('adj', 16667));
+        g.moveTo(r, 0); g.arcTo(l, 0, l, a, r); g.arcTo(l, a, 0, a, r); g.arcTo(0, a, 0, 0, r); g.arcTo(0, 0, l, 0, r); g.closePath(); return true;
+      }
+      case 'ellipse': case 'flowChartConnector':
+        g.ellipse(l / 2, a / 2, l / 2, a / 2, 0, 0, Math.PI * 2); return true;
+      case 'triangle': { const x = l * aj('adj', 50000); g.moveTo(x, 0); g.lineTo(l, a); g.lineTo(0, a); g.closePath(); return true; }
+      case 'rtTriangle': g.moveTo(0, 0); g.lineTo(l, a); g.lineTo(0, a); g.closePath(); return true;
+      case 'diamond': case 'flowChartDecision': g.moveTo(l / 2, 0); g.lineTo(l, a / 2); g.lineTo(l / 2, a); g.lineTo(0, a / 2); g.closePath(); return true;
+      case 'parallelogram': { const d = Math.min(l, a) * aj('adj', 25000); g.moveTo(d, 0); g.lineTo(l, 0); g.lineTo(l - d, a); g.lineTo(0, a); g.closePath(); return true; }
+      case 'trapezoid': { const d = Math.min(l, a) * aj('adj', 25000); g.moveTo(d, 0); g.lineTo(l - d, 0); g.lineTo(l, a); g.lineTo(0, a); g.closePath(); return true; }
+      case 'pentagon': case 'hexagon': case 'heptagon': case 'octagon': {
+        const n = { pentagon: 5, hexagon: 6, heptagon: 7, octagon: 8 }[prst], ini = prst === 'hexagon' ? 0 : -Math.PI / 2 + (prst === 'octagon' ? Math.PI / 8 : 0);
+        for (let i = 0; i < n; i++) { const t = ini + i * 2 * Math.PI / n, x = l / 2 + Math.cos(t) * l / 2, y = a / 2 + Math.sin(t) * a / 2; if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+        g.closePath(); return true;
+      }
+      case 'star5': {
+        for (let i = 0; i < 10; i++) { const t = -Math.PI / 2 + i * Math.PI / 5, k = i % 2 ? 0.38 : 1, x = l / 2 + Math.cos(t) * l / 2 * k, y = a / 2 + Math.sin(t) * a / 2 * k; if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+        g.closePath(); return true;
+      }
+      case 'rightArrow': case 'leftArrow': case 'upArrow': case 'downArrow': {
+        // seta para a direita no retângulo (0,0,L,A); as outras saem por troca de eixos
+        const vertical = prst === 'upArrow' || prst === 'downArrow', L = vertical ? a : l, A = vertical ? l : a;
+        const corpo = A * aj('adj1', 50000) / 2, ponta = Math.min(L, A * aj('adj2', 50000));
+        let pts = [[0, A / 2 - corpo], [L - ponta, A / 2 - corpo], [L - ponta, 0], [L, A / 2], [L - ponta, A], [L - ponta, A / 2 + corpo], [0, A / 2 + corpo]];
+        if (prst === 'leftArrow' || prst === 'upArrow') pts = pts.map(([x, y]) => [L - x, y]);
+        if (vertical) pts = pts.map(([x, y]) => [y, x]);
+        pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); return true;
+      }
+      case 'homePlate': case 'chevron': {                             // pentágono em seta e divisa
+        const d = Math.min(l, a * aj('adj', 50000));
+        g.moveTo(0, 0); g.lineTo(l - d, 0); g.lineTo(l, a / 2); g.lineTo(l - d, a); g.lineTo(0, a);
+        if (prst === 'chevron') g.lineTo(d, a / 2);
+        g.closePath(); return true;
+      }
+      case 'line': case 'straightConnector1': case 'bentConnector3': case 'curvedConnector3':
+        g.moveTo(0, 0); g.lineTo(l, a); return true;
+      default:
+        g.rect(0, 0, l, a); return false;
+    }
+  }
+
+  // Forma livre (custGeom): segue os comandos de caminho do arquivo
+  function tracarFormaLivre(g, geom, l, a) {
+    let completo = true;
+    g.beginPath();
+    for (const p of todos(geom, 'path')) {
+      const kx = l / (num(p, 'w', 0) || l || 1), ky = a / (num(p, 'h', 0) || a || 1);
+      const pt = e => [num(e, 'x', 0) * kx, num(e, 'y', 0) * ky];
+      for (const cmd of p.children) {
+        const pts = filhos(cmd, 'pt').map(pt);
+        if (cmd.localName === 'moveTo' && pts[0]) g.moveTo(pts[0][0], pts[0][1]);
+        else if (cmd.localName === 'lnTo' && pts[0]) g.lineTo(pts[0][0], pts[0][1]);
+        else if (cmd.localName === 'cubicBezTo' && pts.length === 3) g.bezierCurveTo(pts[0][0], pts[0][1], pts[1][0], pts[1][1], pts[2][0], pts[2][1]);
+        else if (cmd.localName === 'quadBezTo' && pts.length === 2) g.quadraticCurveTo(pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
+        else if (cmd.localName === 'close') g.closePath();
+        else completo = false;                                       // arcos não são desenhados
+      }
+    }
+    return completo;
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // PowerPoint: texto
+  // ---------------------------------------------------------------------------------------------------------
+  const TROCA_MARCADOR = { '§': '▪', 'Ø': '➢', 'ü': '✓', 'q': '❑', 'v': '❖', 'n': '■', 'l': '●', 'o': '○', '': '•', '': '▪', '': '➢', '': '✓' };
+
+  // Desenha o corpo de texto `tx` dentro do retângulo (0, 0, l, a).
+  //   fontesDoNivel(nivel) -> lista, da mais específica para a mais geral, dos estilos de parágrafo herdados
+  //   corpos               -> lista dos bodyPr (slide, layout, mestre) de onde vêm margens e alinhamento vertical
+  function desenharTexto(g, c, tx, l, a, opc) {
+    if (!tx) return;
+    const E = c.escala, corpos = [filho(tx, 'bodyPr')].concat(opc.corpos || []).filter(Boolean);
+    const doCorpo = (atributo, padrao) => { for (const b of corpos) if (b.hasAttribute(atributo)) return b.getAttribute(atributo); return padrao; };
+    const mEsq = Number(doCorpo('lIns', 91440)) * E, mDir = Number(doCorpo('rIns', 91440)) * E, mTopo = Number(doCorpo('tIns', 45720)) * E, mBase = Number(doCorpo('bIns', 45720)) * E;
+    const quebra = doCorpo('wrap', 'square') !== 'none';
+    const ancora = doCorpo('anchor', opc.ancoraPadrao || 't');
+    const auto = caminho(tx, 'bodyPr', 'normAutofit');               // "reduzir o texto para caber": o PowerPoint grava a escala usada
+    const escalaFonte = num(auto, 'fontScale', 100000) / 100000, reducaoLinha = num(auto, 'lnSpcReduction', 0) / 100000;
+    const largura = Math.max(1, l - mEsq - mDir);
+
+    const linhas = [];                                               // todas as linhas do texto, já quebradas
+    const contadores = {};
+    for (const p of filhos(tx, 'p')) {
+      const pPr = filho(p, 'pPr'), nivel = num(pPr, 'lvl', 0);
+      const fontes = [pPr].concat(opc.fontesDoNivel(nivel)).filter(Boolean);
+      const doPar = (atributo, padrao) => { for (const f of fontes) if (f.hasAttribute(atributo)) return f.getAttribute(atributo); return padrao; };
+      const filhoDoPar = nomes => { for (const f of fontes) { const x = Array.from(f.children).find(e => nomes.includes(e.localName)); if (x) return x; } return null; };
+      const doTrecho = (rPr, atributo, padrao) => {
+        if (rPr && rPr.hasAttribute(atributo)) return rPr.getAttribute(atributo);
+        for (const f of fontes) { const d = filho(f, 'defRPr'); if (d && d.hasAttribute(atributo)) return d.getAttribute(atributo); }
+        return padrao;
+      };
+      const filhoDoTrecho = (rPr, nome) => {
+        let x = filho(rPr, nome); if (x) return x;
+        for (const f of fontes) { x = filho(filho(f, 'defRPr'), nome); if (x) return x; }
+        return null;
+      };
+      const estilo = rPr => {
+        const px = Number(doTrecho(rPr, 'sz', opc.tamanhoPadrao || 1800)) / 100 * 12700 * E * escalaFonte;
+        let face = (filhoDoTrecho(rPr, 'latin') || { getAttribute: () => null }).getAttribute('typeface') || (opc.titulo ? '+mj-lt' : '+mn-lt');
+        if (face === '+mj-lt') face = c.tema.fonteTitulo; else if (face === '+mn-lt') face = c.tema.fonteCorpo;
+        // cor: a do próprio trecho; senão a que a forma define para o seu texto; senão a herdada dos estilos; senão a cor de texto do tema
+        const cor = lerCor(filho(rPr, 'solidFill'), c) || opc.corPadrao || lerCor(filhoDoTrecho(null, 'solidFill'), c) || hexParaRgb(c.tema.cores[c.mapaCores.tx1 || 'dk1'] || '000000');
+        const negrito = doTrecho(rPr, 'b', '0') === '1', italico = doTrecho(rPr, 'i', '0') === '1';
+        return { px, cor: css(cor), sublinhado: (doTrecho(rPr, 'u', 'none') || 'none') !== 'none', maiusculas: doTrecho(rPr, 'cap', 'none') === 'all',
+                 fonte: (italico ? 'italic ' : '') + (negrito ? 'bold ' : '') + px.toFixed(2) + 'px "' + (face || 'Calibri').replace(/"/g, '') + '", Calibri, Carlito, Arial, sans-serif' };
+      };
+
+      // trechos do parágrafo, na ordem; null marca quebra de linha manual
+      const trechos = [];
+      for (const e of p.children) {
+        if (e.localName === 'r' || e.localName === 'fld') { const t = filho(e, 't'); if (t && t.textContent) trechos.push({ texto: t.textContent, est: estilo(filho(e, 'rPr')) }); }
+        else if (e.localName === 'br') trechos.push(null);
+      }
+      const estBase = trechos.find(Boolean) ? trechos.find(Boolean).est : estilo(filho(p, 'endParaRPr'));
+
+      const margem = Number(doPar('marL', 0)) * E, recuo = Number(doPar('indent', 0)) * E;
+      const alinh = doPar('algn', 'l');
+      const esp = nome => {                                          // espaço antes/depois do parágrafo e entre linhas
+        const no = filhoDoPar([nome]), pct = filho(no, 'spcPct'), pts = filho(no, 'spcPts');
+        return { pct: pct ? num(pct, 'val', 100000) / 100000 : null, px: pts ? num(pts, 'val', 0) / 100 * 12700 * E : null };
+      };
+      const entre = esp('lnSpc'), antes = esp('spcBef'), depois = esp('spcAft');
+      const alturaDe = px => entre.px != null ? entre.px : px * 1.2 * Math.max(0.5, (entre.pct != null ? entre.pct : 1) - reducaoLinha);
+      const espaco = (s, px) => s.px != null ? s.px : s.pct != null ? s.pct * px * 1.2 : 0;
+
+      // marcador
+      let marcador = null;
+      const bu = filhoDoPar(['buNone', 'buChar', 'buAutoNum', 'buBlip']);
+      if (bu && trechos.some(Boolean)) {
+        if (bu.localName === 'buChar') {
+          const ch = bu.getAttribute('char') || '•';
+          marcador = TROCA_MARCADOR[ch] || (ch.charCodeAt(0) >= 0xF000 ? '•' : ch);
+          for (const k in contadores) if (Number(k) >= nivel) delete contadores[k];
+        } else if (bu.localName === 'buAutoNum') {
+          contadores[nivel] = (contadores[nivel] || num(bu, 'startAt', 1) - 1) + 1;
+          const n = contadores[nivel], tipo = bu.getAttribute('type') || 'arabicPeriod';
+          const base = /^alphaLc/.test(tipo) ? String.fromCharCode(96 + ((n - 1) % 26) + 1) : /^alphaUc/.test(tipo) ? String.fromCharCode(64 + ((n - 1) % 26) + 1) : String(n);
+          marcador = /ParenBoth$/.test(tipo) ? '(' + base + ')' : /ParenR$/.test(tipo) ? base + ')' : /Plain$/.test(tipo) ? base : base + '.';
+          for (const k in contadores) if (Number(k) > nivel) delete contadores[k];
+        } else if (bu.localName === 'buBlip') marcador = '•';
+      } else if (!bu || bu.localName === 'buNone') {
+        for (const k in contadores) if (Number(k) >= nivel) delete contadores[k];
+      }
+      const corMarcador = lerCor(filhoDoPar(['buClr']), c);
+
+      // quebra em linhas
+      const primeiraX = marcador ? margem : margem + recuo;
+      let linha = { partes: [], larg: 0, x: primeiraX, px: 0 }, primeira = true;
+      const linhasPar = [];
+      const fechar = () => {
+        if (!linha.px) linha.px = estBase.px;
+        linhasPar.push(linha);
+        linha = { partes: [], larg: 0, x: margem, px: 0 }; primeira = false;
+      };
+      for (const t of trechos) {
+        if (!t) { fechar(); continue; }
+        g.font = t.est.fonte;
+        const texto = t.est.maiusculas ? t.texto.toUpperCase() : t.texto;
+        for (const pedaco of texto.split(/(\s+)/)) {
+          if (!pedaco) continue;
+          const w = g.measureText(pedaco).width, ehEspaco = /^\s+$/.test(pedaco);
+          if (quebra && !ehEspaco && linha.partes.length && linha.larg + w > largura - linha.x + 0.5) fechar();
+          if (ehEspaco && !linha.partes.length && !primeira) continue;                  // não começa linha continuada com espaço
+          linha.partes.push({ texto: pedaco, est: t.est, w });
+          linha.larg += w; linha.px = Math.max(linha.px, t.est.px);
+        }
+      }
+      fechar();
+      linhasPar.forEach((ln, i) => {
+        // espaços no fim não contam para centralizar ou alinhar à direita
+        while (ln.partes.length && /^\s+$/.test(ln.partes[ln.partes.length - 1].texto)) ln.larg -= ln.partes.pop().w;
+        ln.altura = alturaDe(ln.px); ln.alinh = alinh;
+        ln.antes = i === 0 ? espaco(antes, ln.px) : 0;
+        ln.depois = i === linhasPar.length - 1 ? espaco(depois, ln.px) : 0;
+        if (i === 0 && marcador) ln.marcador = { texto: marcador, x: margem + recuo, est: estBase, cor: corMarcador ? css(corMarcador) : estBase.cor };
+        linhas.push(ln);
+      });
+    }
+    if (linhas.length) linhas[0].antes = 0;
+
+    const total = linhas.reduce((s, ln) => s + ln.antes + ln.altura + ln.depois, 0);
+    let y = ancora === 'ctr' ? mTopo + (a - mTopo - mBase - total) / 2 : ancora === 'b' ? a - mBase - total : mTopo;
+    g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+    for (const ln of linhas) {
+      y += ln.antes;
+      const base = y + ln.altura / 2 + ln.px * 0.34;
+      const livre = largura - ln.x - ln.larg;
+      let x = mEsq + ln.x + (ln.alinh === 'ctr' ? livre / 2 : ln.alinh === 'r' ? livre : 0);
+      if (ln.marcador) {
+        g.font = ln.marcador.est.fonte; g.fillStyle = ln.marcador.cor;
+        g.fillText(ln.marcador.texto, mEsq + ln.marcador.x + (ln.alinh === 'ctr' ? livre / 2 : ln.alinh === 'r' ? livre : 0), base);
+      }
+      for (const pt of ln.partes) {
+        g.font = pt.est.fonte; g.fillStyle = pt.est.cor;
+        g.fillText(pt.texto, x, base);
+        if (pt.est.sublinhado) g.fillRect(x, base + pt.est.px * 0.08, pt.w, Math.max(1, pt.est.px * 0.06));
+        x += pt.w;
+      }
+      y += ln.altura + ln.depois;
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // PowerPoint: árvore de elementos do slide
+  // ---------------------------------------------------------------------------------------------------------
+  const FAMILIA = { title: 'titulo', ctrTitle: 'titulo', body: 'corpo', subTitle: 'corpo', obj: 'corpo' };
+
+  function espacoReservado(el) {                 // { tipo, idx } se o elemento é um espaço reservado (título, corpo...)
+    const ph = todos(Array.from(el.children).find(f => /^nv/.test(f.localName)), 'ph')[0];
+    return ph ? { tipo: ph.getAttribute('type') || 'obj', idx: ph.getAttribute('idx') } : null;
+  }
+
+  // Procura, num layout ou slide mestre, o espaço reservado correspondente
+  function acharReservado(doc, ph, noMestre) {
+    if (!doc || !ph) return null;
+    const arvore = todos(doc, 'spTree')[0], cands = filhos(arvore, 'sp').concat(filhos(arvore, 'pic')).map(el => ({ el, ph: espacoReservado(el) })).filter(x => x.ph);
+    let x = null;
+    if (!noMestre && ph.idx != null) x = cands.find(k => k.ph.idx === ph.idx);
+    if (!x) x = cands.find(k => k.ph.tipo === ph.tipo);
+    if (!x && FAMILIA[ph.tipo]) x = cands.find(k => FAMILIA[k.ph.tipo] === FAMILIA[ph.tipo]);
+    return x ? x.el : null;
+  }
+
+  function lerCaixa(xfrm) {                      // posição e tamanho, ainda nas unidades do arquivo (EMU)
+    const off = filho(xfrm, 'off'), ext = filho(xfrm, 'ext');
+    if (!off || !ext) return null;
+    return { x: num(off, 'x', 0), y: num(off, 'y', 0), l: num(ext, 'cx', 0), a: num(ext, 'cy', 0),
+             giro: num(xfrm, 'rot', 0) / 60000 * Math.PI / 180, espH: xfrm.getAttribute('flipH') === '1', espV: xfrm.getAttribute('flipV') === '1' };
+  }
+
+  // Executa `desenhar` com o contexto posicionado no canto da caixa, já girado (e espelhado, se pedido)
+  function naCaixa(g, cx, espelhar, desenhar) {
+    g.save();
+    g.translate(cx.x + cx.l / 2, cx.y + cx.a / 2);
+    if (cx.giro) g.rotate(cx.giro);
+    if (espelhar) g.scale(cx.espH ? -1 : 1, cx.espV ? -1 : 1);
+    g.translate(-cx.l / 2, -cx.a / 2);
+    desenhar();
+    g.restore();
+  }
+
+  async function desenharImagemNaCaixa(g, c, rel, rels, srcRect, l, a, alfa) {
+    const r = rel && rels.get(rel), img = r ? await c.pac.imagem(r.alvo) : null;
+    if (!img) { c.avisos.add('Imagem em formato não suportado (EMF, WMF ou TIFF) não foi desenhada.'); return; }
+    const il = img.naturalWidth || img.width, ia = img.naturalHeight || img.height;
+    const e = num(srcRect, 'l', 0) / 100000, t = num(srcRect, 't', 0) / 100000, d = num(srcRect, 'r', 0) / 100000, b = num(srcRect, 'b', 0) / 100000;
+    g.save(); if (alfa != null) g.globalAlpha *= alfa;
+    try { g.drawImage(img, il * e, ia * t, Math.max(1, il * (1 - e - d)), Math.max(1, ia * (1 - t - b)), 0, 0, l, a); } catch (err) { /* imagem inválida */ }
+    g.restore();
+  }
+
+  // Desenha os elementos de uma árvore (spTree ou grupo). `tr` converte EMU do arquivo em pixels do canvas.
+  async function desenharArvore(g, c, arvore, rels, tr, ctxSlide) {
+    for (const el of arvore.children) {
+      const nome = el.localName;
+      if (nome === 'AlternateContent') {                             // conteúdo com versão alternativa: usa a de reserva
+        const alt = filho(el, 'Fallback') || filho(el, 'Choice');
+        if (alt) await desenharArvore(g, c, alt, rels, tr, ctxSlide);
+        continue;
+      }
+      if (!['sp', 'pic', 'cxnSp', 'grpSp', 'graphicFrame'].includes(nome)) continue;
+      const ph = espacoReservado(el);
+      if (ph && !ctxSlide.ehSlide) continue;                         // do layout e do mestre só entram os elementos fixos
+
+      if (nome === 'grpSp') {
+        const xf = caminho(el, 'grpSpPr', 'xfrm'), cx = lerCaixa(xf), chOff = filho(xf, 'chOff'), chExt = filho(xf, 'chExt');
+        let tr2 = tr;
+        if (cx && chOff && chExt) {
+          const kx = cx.l / (num(chExt, 'cx', 0) || cx.l || 1), ky = cx.a / (num(chExt, 'cy', 0) || cx.a || 1);
+          tr2 = { kx: tr.kx * kx, ky: tr.ky * ky, dx: tr.dx + tr.kx * (cx.x - num(chOff, 'x', 0) * kx), dy: tr.dy + tr.ky * (cx.y - num(chOff, 'y', 0) * ky) };
+        }
+        await desenharArvore(g, c, el, rels, tr2, ctxSlide);
+        continue;
+      }
+
+      // espaços reservados herdam posição e estilo do layout e do mestre
+      const noLayout = ph ? acharReservado(ctxSlide.layout, ph, false) : null;
+      const noMestre = ph ? acharReservado(ctxSlide.mestre, ph, true) : null;
+      const spPr = filho(el, 'spPr');
+      let cx = lerCaixa(nome === 'graphicFrame' ? filho(el, 'xfrm') : filho(spPr, 'xfrm'))
+            || lerCaixa(caminho(noLayout, 'spPr', 'xfrm')) || lerCaixa(caminho(noMestre, 'spPr', 'xfrm'));
+      if (!cx) continue;
+      cx = { x: cx.x * tr.kx + tr.dx, y: cx.y * tr.ky + tr.dy, l: cx.l * tr.kx, a: cx.a * tr.ky, giro: cx.giro, espH: cx.espH, espV: cx.espV };
+
+      if (nome === 'graphicFrame') { await desenharQuadro(g, c, el, cx); continue; }
+
+      if (nome === 'pic') {
+        const bf = filho(el, 'blipFill'), blip = filho(bf, 'blip'), am = filho(blip, 'alphaModFix');
+        const tarefas = [];
+        naCaixa(g, cx, true, () => { tarefas.push([g.getTransform(), g.globalAlpha]); });
+        // o desenho de imagem é assíncrono: reaplica a transformação calculada acima
+        g.save(); g.setTransform(tarefas[0][0]);
+        await desenharImagemNaCaixa(g, c, idRel(blip, 'embed'), rels, filho(bf, 'srcRect'), cx.l, cx.a, am ? num(am, 'amt', 100000) / 100000 : null);
+        g.restore();
+        continue;
+      }
+
+      // ---- forma (sp) ou conector (cxnSp) ----
+      const estilo = filho(el, 'style');
+      const refDe = nomeRef => { const r = filho(estilo, nomeRef); return r && num(r, 'idx', 0) > 0 ? lerCor(r, c) : null; };
+      const herdaSpPr = [spPr, filho(noLayout, 'spPr'), filho(noMestre, 'spPr')];
+      let preench = null;
+      for (const s of herdaSpPr) { preench = lerPreenchimento(s, c); if (preench) break; }
+      if (!preench) { const cor = refDe('fillRef'); if (cor) preench = { tipo: 'cor', cor }; }
+
+      let linha = null;                                              // { cor, larg, traco }
+      const ln = filho(spPr, 'ln');
+      const pLinha = ln ? lerPreenchimento(ln, c) : null;
+      if (pLinha && pLinha.tipo === 'cor') linha = { cor: pLinha.cor, larg: num(ln, 'w', 9525) };
+      else if (!pLinha) { const cor = refDe('lnRef'); if (cor) linha = { cor, larg: num(ln, 'w', nome === 'cxnSp' ? 9525 : 12700) }; }
+      if (linha) { const d = filho(ln, 'prstDash'); linha.traco = d ? d.getAttribute('val') : 'solid'; }
+
+      const geom = filho(spPr, 'prstGeom') || filho(noLayout && filho(noLayout, 'spPr'), 'prstGeom'), livre = filho(spPr, 'custGeom');
+      const prst = geom ? geom.getAttribute('prst') : (nome === 'cxnSp' ? 'line' : 'rect');
+      const ajustes = {};
+      for (const gd of todos(geom, 'gd')) { const m = /val\s+(-?\d+)/.exec(gd.getAttribute('fmla') || ''); if (m) ajustes[gd.getAttribute('name')] = Number(m[1]); }
+
+      let imgFundo = null;
+      naCaixa(g, cx, true, () => {
+        const conhecida = livre ? tracarFormaLivre(g, livre, cx.l, cx.a) : tracarForma(g, prst, cx.l, cx.a, ajustes);
+        if (!conhecida && (preench && preench.tipo !== 'nenhum' || linha)) c.avisos.add('Formas especiais foram desenhadas de modo simplificado.');
+        const aberta = /^(line|.*Connector\d?)$/.test(prst);
+        if (preench && !aberta) {
+          if (preench.tipo === 'cor' || preench.tipo === 'grad') { g.fillStyle = estiloDePreenchimento(g, preench, cx.l, cx.a); g.fill(); }
+          else if (preench.tipo === 'imagem') imgFundo = g.getTransform();
+        }
+        if (linha) {
+          const w = Math.max(1, linha.larg * c.escala);
+          g.strokeStyle = css(linha.cor); g.lineWidth = w; g.lineJoin = 'round';
+          g.setLineDash(/dash/i.test(linha.traco) ? [w * 4, w * 3] : /dot/i.test(linha.traco) ? [w, w * 2] : []);
+          g.stroke(); g.setLineDash([]);
+        }
+      });
+      if (imgFundo) { g.save(); g.setTransform(imgFundo); await desenharImagemNaCaixa(g, c, preench.rel, rels, null, cx.l, cx.a, null); g.restore(); }
+
+      const tx = filho(el, 'txBody');
+      if (tx && todos(tx, 't').some(t => t.textContent)) {
+        const familia = ph ? (FAMILIA[ph.tipo] || 'outro') : null;
+        const estiloMestre = familia ? caminho(ctxSlide.mestre && ctxSlide.mestre.documentElement, 'txStyles', familia === 'titulo' ? 'titleStyle' : familia === 'corpo' ? 'bodyStyle' : 'otherStyle') : null;
+        const listas = [caminho(el, 'txBody', 'lstStyle'), caminho(noLayout, 'txBody', 'lstStyle'), caminho(noMestre, 'txBody', 'lstStyle'), estiloMestre, c.estiloPadrao];
+        const corRef = (() => { const r = filho(estilo, 'fontRef'); return r ? lerCor(r, c) : null; })();
+        naCaixa(g, cx, false, () => desenharTexto(g, c, tx, cx.l, cx.a, {
+          fontesDoNivel: n => listas.map(lista => filho(lista, 'lvl' + (n + 1) + 'pPr')),
+          corpos: [caminho(noLayout, 'txBody', 'bodyPr'), caminho(noMestre, 'txBody', 'bodyPr')],
+          corPadrao: corRef, titulo: familia === 'titulo'
+        }));
+      }
+    }
+  }
+
+  // Tabela (os outros quadros — gráfico, SmartArt, objeto incorporado — viram um aviso e uma marca no lugar)
+  async function desenharQuadro(g, c, el, cx) {
+    const tbl = todos(el, 'tbl')[0];
+    if (!tbl) {
+      const oQue = todos(el, 'chart').length ? 'Gráfico' : todos(el, 'relIds').length ? 'SmartArt' : 'Objeto incorporado';
+      c.avisos.add(oQue + ' não foi desenhado.');
+      naCaixa(g, cx, false, () => {
+        g.fillStyle = 'rgba(128,128,128,0.10)'; g.fillRect(0, 0, cx.l, cx.a);
+        g.strokeStyle = 'rgba(128,128,128,0.7)'; g.lineWidth = 2; g.setLineDash([8, 6]); g.strokeRect(1, 1, cx.l - 2, cx.a - 2); g.setLineDash([]);
+        g.fillStyle = 'rgba(96,96,96,0.9)'; g.font = Math.max(12, c.larguraPx / 60) + 'px Calibri, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(oQue + ' (não exibido)', cx.l / 2, cx.a / 2); g.textAlign = 'left';
+      });
+      return;
+    }
+    const colunas = todos(filho(tbl, 'tblGrid'), 'gridCol').map(k => num(k, 'w', 0)), linhasT = filhos(tbl, 'tr');
+    const somaL = colunas.reduce((s, v) => s + v, 0) || 1, somaA = linhasT.reduce((s, r) => s + num(r, 'h', 0), 0) || 1;
+    const kx = cx.l / somaL, ky = cx.a / somaA;
+    const tblPr = filho(tbl, 'tblPr'), cabecalho = tblPr && tblPr.getAttribute('firstRow') === '1', faixas = tblPr && tblPr.getAttribute('bandRow') === '1';
+    const destaque = hexParaRgb(c.tema.cores.accent1 || '4472C4'), claro = k => ({ r: destaque.r * k + 255 * (1 - k), g: destaque.g * k + 255 * (1 - k), b: destaque.b * k + 255 * (1 - k), a: 1 });
+    const branco = hexParaRgb('FFFFFF');
+    g.save(); g.translate(cx.x, cx.y);
+    let y = 0;
+    for (let i = 0; i < linhasT.length; i++) {
+      const alt = num(linhasT[i], 'h', 0) * ky;
+      let x = 0, col = 0;
+      for (const tc of filhos(linhasT[i], 'tc')) {
+        const vao = num(tc, 'gridSpan', 1), larg = colunas.slice(col, col + vao).reduce((s, v) => s + v, 0) * kx;
+        const mesclada = tc.getAttribute('hMerge') === '1' || tc.getAttribute('vMerge') === '1';
+        if (!mesclada) {
+          let altCel = alt;
+          for (let k = 1; k < num(tc, 'rowSpan', 1) && linhasT[i + k]; k++) altCel += num(linhasT[i + k], 'h', 0) * ky;
+          const tcPr = filho(tc, 'tcPr'), proprio = lerPreenchimento(tcPr, c), ehCab = cabecalho && i === 0;
+          // sem cor própria, imita o estilo de tabela padrão do PowerPoint: cabeçalho na cor de destaque e linhas alternadas
+          const fundo = proprio || { tipo: 'cor', cor: ehCab ? destaque : claro(faixas && (i - (cabecalho ? 1 : 0)) % 2 === 0 ? 0.28 : 0.14) };
+          g.save(); g.translate(x, y);
+          if (fundo.tipo === 'cor' || fundo.tipo === 'grad') { g.fillStyle = estiloDePreenchimento(g, fundo, larg, altCel); g.fillRect(0, 0, larg, altCel); }
+          g.strokeStyle = '#ffffff'; g.lineWidth = Math.max(1, c.larguraPx / 800); g.strokeRect(0, 0, larg, altCel);
+          const padrao = filho(c.estiloPadrao, 'lvl1pPr');
+          desenharTexto(g, c, filho(tc, 'txBody'), larg, altCel, {
+            fontesDoNivel: n => [filho(c.estiloPadrao, 'lvl' + (n + 1) + 'pPr') || padrao],
+            corpos: [{ hasAttribute: a => ['lIns', 'rIns', 'tIns', 'bIns', 'anchor'].includes(a) && !!tcPr && tcPr.hasAttribute(({ lIns: 'marL', rIns: 'marR', tIns: 'marT', bIns: 'marB', anchor: 'anchor' })[a]),
+                       getAttribute: a => tcPr.getAttribute(({ lIns: 'marL', rIns: 'marR', tIns: 'marT', bIns: 'marB', anchor: 'anchor' })[a]) }],
+            corPadrao: !proprio && ehCab ? branco : null, tamanhoPadrao: 1800
+          });
+          g.restore();
+        }
+        x += larg; col += vao;
+      }
+      y += alt;
+    }
+    g.restore();
+  }
+
+  // Fundo do slide: o do próprio slide; se não tiver, o do layout; se não, o do mestre; se não, branco
+  async function desenharFundo(g, c, docs, l, a) {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, l, a);
+    for (const d of docs) {
+      const bg = d.doc && caminho(d.doc.documentElement, 'cSld', 'bg');
+      if (!bg) continue;
+      let p = lerPreenchimento(filho(bg, 'bgPr'), c);
+      if (!p) { const cor = lerCor(filho(bg, 'bgRef'), c); if (cor) p = { tipo: 'cor', cor }; }
+      if (!p) continue;
+      if (p.tipo === 'cor' || p.tipo === 'grad') { g.fillStyle = estiloDePreenchimento(g, p, l, a); g.fillRect(0, 0, l, a); }
+      else if (p.tipo === 'imagem') await desenharImagemNaCaixa(g, c, p.rel, d.rels, null, l, a, null);
+      return;
+    }
+  }
+
+  async function lerPptx(arquivo, aoProgresso) {
+    const JSZip = await carregarJSZip();
+    let zip;
+    try { zip = await JSZip.loadAsync(await arquivo.arrayBuffer()); }
+    catch (e) { throw new Error('Não é um .pptx válido. O arquivo pode estar corrompido ou protegido por senha.'); }
+    const pac = new Pacote(zip), ARQ = 'ppt/presentation.xml', pres = await pac.xml(ARQ);
+    if (!pres || !pres.documentElement || pres.documentElement.localName !== 'presentation') throw new Error('Não é uma apresentação do PowerPoint.');
+
+    const tam = todos(pres, 'sldSz')[0], larguraEmu = num(tam, 'cx', 9144000), alturaEmu = num(tam, 'cy', 6858000);
+    const escala = LARGURA_SLIDE / larguraEmu, relsPres = await pac.rels(ARQ);
+    const slides = todos(pres, 'sldId').map(s => relsPres.get(idRel(s, 'id'))).filter(Boolean).map(r => r.alvo);
+    if (!slides.length) throw new Error('A apresentação não tem slides.');
+
+    const temas = new Map();
+    async function lerTema(arq) {
+      if (!temas.has(arq)) {
+        const doc = arq ? await pac.xml(arq) : null, cores = {};
+        for (const e of (todos(doc, 'clrScheme')[0] || { children: [] }).children) {
+          const k = e.firstElementChild;
+          if (k) cores[e.localName] = k.getAttribute('val') && k.localName === 'srgbClr' ? k.getAttribute('val') : (k.getAttribute('lastClr') || (k.getAttribute('val') === 'window' ? 'FFFFFF' : '000000'));
+        }
+        const face = n => (caminho(todos(doc, 'fontScheme')[0], n, 'latin') || { getAttribute: () => null }).getAttribute('typeface');
+        temas.set(arq, { cores, fonteTitulo: face('majorFont') || 'Calibri', fonteCorpo: face('minorFont') || 'Calibri' });
+      }
+      return temas.get(arq);
+    }
+
+    const paginas = [];
+    for (let i = 0; i < slides.length; i++) {
+      if (aoProgresso) aoProgresso(arquivo.name + ': slide ' + (i + 1) + ' de ' + slides.length);
+      const arqSlide = slides[i], slide = await pac.xml(arqSlide);
+      const arqLayout = await pac.alvoPorTipo(arqSlide, 'slideLayout'), layout = arqLayout ? await pac.xml(arqLayout) : null;
+      const arqMestre = arqLayout ? await pac.alvoPorTipo(arqLayout, 'slideMaster') : null, mestre = arqMestre ? await pac.xml(arqMestre) : null;
+      const tema = await lerTema(arqMestre ? await pac.alvoPorTipo(arqMestre, 'theme') : null);
+
+      const mapaCores = { bg1: 'lt1', tx1: 'dk1', bg2: 'lt2', tx2: 'dk2' };
+      const mapa = mestre && filho(mestre.documentElement, 'clrMap');
+      if (mapa) for (const at of mapa.attributes) mapaCores[at.name] = at.value;
+
+      const canvas = novoCanvas(LARGURA_SLIDE, alturaEmu * escala), g = canvas.getContext('2d');
+      const c = { pac, escala, larguraPx: LARGURA_SLIDE, tema, mapaCores, avisos: new Set(), estiloPadrao: filho(pres.documentElement, 'defaultTextStyle') };
+      const tr = { kx: escala, ky: escala, dx: 0, dy: 0 };
+      const camadas = [
+        { doc: slide, rels: await pac.rels(arqSlide), ehSlide: true },
+        { doc: layout, rels: arqLayout ? await pac.rels(arqLayout) : new Map() },
+        { doc: mestre, rels: arqMestre ? await pac.rels(arqMestre) : new Map() }
+      ];
+      try {
+        await desenharFundo(g, c, camadas, canvas.width, canvas.height);
+        const semMestreNoSlide = slide.documentElement.getAttribute('showMasterSp') === '0';
+        const semMestreNoLayout = layout && layout.documentElement.getAttribute('showMasterSp') === '0';
+        // de baixo para cima: elementos fixos do mestre, depois os do layout, depois o conteúdo do slide
+        for (const k of [2, 1, 0]) {
+          const cam = camadas[k];
+          if (!cam.doc || (k > 0 && semMestreNoSlide) || (k === 2 && semMestreNoLayout)) continue;
+          const arvore = caminho(cam.doc.documentElement, 'cSld', 'spTree');
+          if (arvore) await desenharArvore(g, c, arvore, cam.rels, tr, { ehSlide: !!cam.ehSlide, layout, mestre });
+        }
+      } catch (e) {
+        c.avisos.add('O slide não pôde ser desenhado por completo (' + (e && e.message || 'erro') + ').');
+      }
+      paginas.push({ nome: arquivo.name + ' · slide ' + (i + 1), origem: 'pptx', arquivo: arquivo.name, indice: i, largura: canvas.width, altura: canvas.height, imagem: canvas, avisos: Array.from(c.avisos) });
+      await new Promise(r => setTimeout(r, 0));                      // deixa a tela respirar entre um slide e outro
+    }
+    return paginas;
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // Interface pública
+  // ---------------------------------------------------------------------------------------------------------
+
+  // Recebe uma lista de arquivos (FileList ou array de File) e devolve { paginas, recusados }.
+  async function receber(arquivos, opcoes) {
+    const aoProgresso = opcoes && opcoes.aoProgresso, paginas = [], recusados = [];
+    const lista = Array.from(arquivos || []).sort((a, b) => ordemNatural(a.name, b.name));
+    for (const arq of lista) {
+      const motivo = motivoDaRecusa(arq);
+      if (motivo) { recusados.push({ nome: arq.name, motivo }); continue; }
+      try {
+        if (aoProgresso) aoProgresso('Lendo ' + arq.name + '…');
+        if (tipoDe(arq) === 'imagem') paginas.push(await lerImagem(arq));
+        else paginas.push(...await lerPptx(arq, aoProgresso));
+      } catch (e) {
+        recusados.push({ nome: arq.name, motivo: (e && e.message) || 'Não foi possível ler o arquivo.' });
+      }
+    }
+    return { paginas, recusados };
+  }
+
+  // Liga o módulo à página: botão que abre o seletor de arquivos e área que aceita arquivos arrastados.
+  function ligar(opcoes) {
+    const o = opcoes || {};
+    let ocupado = false;
+    const entrada = document.createElement('input');
+    entrada.type = 'file'; entrada.multiple = true; entrada.accept = ACEITA; entrada.hidden = true;
+    document.body.appendChild(entrada);
+
+    async function processar(arquivos) {
+      if (ocupado || !arquivos || !arquivos.length) return;
+      ocupado = true;
+      try {
+        const resultado = await receber(arquivos, { aoProgresso: o.aoProgresso });
+        if (o.aoReceber) o.aoReceber(resultado);
+      } catch (e) {
+        if (o.aoErro) o.aoErro(e);
+      } finally {
+        ocupado = false;
+      }
+    }
+
+    entrada.addEventListener('change', () => { const arqs = Array.from(entrada.files); entrada.value = ''; processar(arqs); });
+    if (o.botao) o.botao.addEventListener('click', () => entrada.click());
+    if (o.areaDeSoltar) {
+      o.areaDeSoltar.addEventListener('dragover', e => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault(); });
+      o.areaDeSoltar.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); processar(Array.from(e.dataTransfer.files)); } });
+    }
+    return { abrir: () => entrada.click(), enviar: processar };
+  }
+
+  global.ModuloUpload = { receber, ligar, ACEITA, EXTENSOES_DE_IMAGEM: EXT_IMAGEM.slice(), TAMANHO_MAXIMO };
+})(window);
+</script>
 
 <script type="module">
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
-const W = 1280, H = 720;            // coordenadas lógicas da lousa
-const BW = 58, BH = 43, VAO = 8;    // tamanho dos botões e vão entre eles
-const PAINEL = { x: 110, y: 70, w: 20 + 4 * BW + 3 * VAO, h: 347 };   // afastado das bordas, onde a câmera perde a mão
-const noPainel = (x, y) => x > PAINEL.x - 12 && x < PAINEL.x + PAINEL.w + 12 && y > PAINEL.y - 12 && y < PAINEL.y + PAINEL.h + 12;
+// Coordenadas lógicas da lousa. O lado menor da tela vale sempre 720; o maior acompanha o formato da janela
+// (1280x720 numa tela 16:9 deitada, 720x1560 num celular em pé). Ver ajustarTela().
+let W = 1280, H = 720;
+const MOVEL = window.matchMedia('(pointer: coarse)').matches;      // celular ou tablet
+const BW = 58, BH = 43, VAO = 8;    // tamanho dos botões e vão entre eles, nas medidas internas do painel
+// x, y: canto do painel na lousa, afastado das bordas, onde a câmera perde a mão. k: ampliação do painel (maior no celular).
+const PAINEL = { x: 110, y: 70, w: 20 + 4 * BW + 3 * VAO, h: 347, k: 1 };
+const noPainel = (x, y) => x > PAINEL.x - 12 && x < PAINEL.x + PAINEL.w * PAINEL.k + 12 && y > PAINEL.y - 12 && y < PAINEL.y + PAINEL.h * PAINEL.k + 12;
 
 // Limiares dos gestos. As distâncias são divididas pelo tamanho da palma, então não mudam com a distância até a câmera.
 const JANELA_CLIQUE = 250;          // ms: o clique vale onde o dedo apontava pouco antes de abaixar
@@ -88,7 +926,8 @@ const ESCALA_MIN = 0.25, ESCALA_MAX = 4;
 
 const video = document.getElementById('video');
 const tela = document.getElementById('tela');
-const ctx = tela.getContext('2d');
+const ctxTela = tela.getContext('2d');
+let ctx = ctxTela;                  // as funções de desenho usam `ctx`; ele aponta para a lousa ou para uma das imagens guardadas (ver quadro)
 const el = id => document.getElementById(id);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const meio = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
@@ -101,30 +940,102 @@ const MEIA = { quadrado: [80, 80], retangulo: [120, 70], circulo: [80, 80], tria
 let cor = CORES[0];
 let tam = TAMANHOS[1];
 let cameraVisivel = true;
+let canetaAtiva = false;            // caneta e borracha: começam desligadas; ligam pelo botão do painel
 let itens = [];                     // traços {tipo:'traco', cor, tam, pontos} e formas {tipo, x, y, cor, tam, rot, esc}
 let novasFormas = 0;
 let maos = [];                      // uma entrada por mão acompanhada (até duas)
 
 // ---------- botões do painel ----------
 const botoes = [];
-const col = i => PAINEL.x + 10 + (i % 4) * (BW + VAO), lin = (y0, i) => PAINEL.y + y0 + Math.floor(i / 4) * (BH + VAO);
+// As posições dos botões são relativas ao canto do painel; quem converte para a lousa é botaoEm e desenharPainel
+const col = i => 10 + (i % 4) * (BW + VAO), lin = (y0, i) => y0 + Math.floor(i / 4) * (BH + VAO);
 const ROTULOS = [['Cor', 24], ['Traço', 146], ['Formas', 217], ['Lousa', 288]];     // texto e altura dentro do painel
 CORES.forEach((c, i) => botoes.push({ tipo: 'cor', valor: c, x: col(i), y: lin(30, i), w: BW, h: BH }));
 TAMANHOS.forEach((t, i) => botoes.push({ tipo: 'tam', valor: t, x: col(i), y: lin(152, i), w: BW, h: BH }));
 FORMAS.forEach((f, i) => botoes.push({ tipo: 'forma', valor: f, x: col(i), y: lin(223, i), w: BW, h: BH }));
 botoes.push({ tipo: 'limpar', x: col(0), y: lin(294, 0), w: BW, h: BH });
 botoes.push({ tipo: 'camera', x: col(1), y: lin(294, 0), w: BW, h: BH });
+botoes.push({ tipo: 'caneta', x: col(2), y: lin(294, 0), w: BW * 2 + VAO, h: BH });     // liga e desliga caneta e borracha, as duas juntas
 
 function botaoEm(x, y) {
+  x = (x - PAINEL.x) / PAINEL.k; y = (y - PAINEL.y) / PAINEL.k;      // da lousa para as medidas internas do painel
   return botoes.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
 }
 
-function limpar() {
-  itens = []; novasFormas = 0;
+// Troca o conjunto de desenhos em uso; as mãos largam o que seguravam do conjunto anterior
+function trocarItens(novos) {
+  itens = novos; pedirDesenho();
   for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.agarrada = null; m.giro = null; m.redim = null; m.querTam = null; }
+}
+function limpar() { novasFormas = 0; trocarItens([]); }
+
+// ---------- páginas enviadas: slides de .pptx e imagens ----------
+const OPACIDADE_CAMERA = 0.9;       // 1 = imagem da câmera cheia; menos que isso deixa o fundo branco clarear a imagem
+const OPACIDADE_PAGINA = 0.85;      // 1 = página cobre a câmera por completo; menos que isso deixa a mão aparecer por trás
+let paginas = [];                   // vindas do ModuloUpload: { nome, largura, altura, imagem, avisos }
+let paginaAtual = -1;               // -1 = nenhuma página aberta
+let itensSemPagina = [];            // desenhos feitos antes de abrir páginas
+const anotacoes = new Map();        // página -> o que foi desenhado sobre ela
+
+// Aplica às camadas da página o que mudou: câmera visível ou não, e qual página está aberta
+function aplicarCamadas() {
+  video.style.opacity = OPACIDADE_CAMERA;
+  video.style.visibility = cameraVisivel ? 'visible' : 'hidden';
+  const camada = el('camadaPagina'), pg = paginas[paginaAtual];
+  camada.style.opacity = OPACIDADE_PAGINA;
+  if (pg) { if (camada.firstChild !== pg.imagem) camada.replaceChildren(pg.imagem); }     // a página inteira, centralizada, sem cortar nem esticar
+  else camada.replaceChildren();
+}
+
+function atualizarBarra() {
+  aplicarCamadas();
+  const tem = paginaAtual >= 0;
+  for (const id of ['btAnt', 'btProx', 'contador', 'btFechar']) el(id).hidden = !tem;
+  if (tem) el('contador').textContent = (paginaAtual + 1) + ' / ' + paginas.length;
+}
+
+function irParaPagina(i) {
+  if (!paginas.length) return;
+  i = Math.max(0, Math.min(paginas.length - 1, i));
+  if (i === paginaAtual) return;
+  if (paginaAtual >= 0) anotacoes.set(paginas[paginaAtual], itens); else itensSemPagina = itens;     // guarda os desenhos da página que sai
+  paginaAtual = i;
+  trocarItens(anotacoes.get(paginas[i]) || []);
+  atualizarBarra();
+}
+
+function fecharPaginas() {
+  if (paginaAtual < 0) return;
+  paginas = []; anotacoes.clear(); paginaAtual = -1;
+  trocarItens(itensSemPagina);
+  atualizarBarra();
+}
+
+let relogioRecado = 0;
+function recado(texto, ms) {
+  clearTimeout(relogioRecado);
+  el('recado').textContent = texto; el('recado').hidden = !texto;
+  if (texto && ms) relogioRecado = setTimeout(() => { el('recado').hidden = true; }, ms);
+}
+
+function paginasRecebidas(resultado) {
+  const novas = resultado.paginas, linhas = [];
+  if (novas.length) {
+    const primeira = paginas.length;
+    paginas.push(...novas);                     // novos envios entram depois das páginas já abertas
+    irParaPagina(primeira);
+    atualizarBarra();
+    linhas.push(novas.length === 1 ? '1 página recebida.' : novas.length + ' páginas recebidas.');
+    const avisos = new Set(), comAviso = novas.filter(pg => pg.avisos.length);
+    for (const pg of comAviso) for (const a of pg.avisos) avisos.add(a);
+    if (comAviso.length) linhas.push('Em ' + comAviso.length + (comAviso.length === 1 ? ' slide' : ' slides') + ' algo ficou de fora:', ...Array.from(avisos).map(a => '• ' + a));
+  }
+  for (const r of resultado.recusados) linhas.push(r.nome + ': ' + r.motivo);
+  recado(linhas.join('\n') || 'Nenhum arquivo recebido.', resultado.recusados.length || linhas.length > 1 ? 12000 : 4000);
 }
 
 function clicar(x, y) {
+  pedirDesenho();
   x = Math.round(x); y = Math.round(y);
   const b = botaoEm(x, y);
   el('clique').textContent = x + ', ' + y + (b ? ' → ' + (b.valor && b.tipo !== 'cor' ? b.valor : b.tipo) : ' → nada');
@@ -133,16 +1044,26 @@ function clicar(x, y) {
   else if (b.tipo === 'tam') tam = b.valor;
   else if (b.tipo === 'forma') {
     const desloc = (novasFormas++ % 6) * 28;      // cada nova forma nasce um pouco deslocada da anterior
-    itens.push({ tipo: b.valor, x: (PAINEL.x + PAINEL.w + W) / 2 - 70 + desloc, y: H / 2 - 70 + desloc, cor, tam, rot: 0, esc: 1 });
+    // nasce no meio da área livre: à direita do painel na tela deitada, abaixo dele na tela em pé
+    const direita = PAINEL.x + PAINEL.w * PAINEL.k, baixo = PAINEL.y + PAINEL.h * PAINEL.k;
+    const cx = W - direita > 420 ? (direita + W) / 2 : W / 2, cy = W - direita > 420 ? H / 2 : (baixo + H) / 2;
+    itens.push({ tipo: b.valor, x: cx - 70 + desloc, y: cy - 70 + desloc, cor, tam, rot: 0, esc: 1 });
   }
   else if (b.tipo === 'limpar') limpar();
-  else if (b.tipo === 'camera') cameraVisivel = !cameraVisivel;
-  b.piscaAte = performance.now() + 220;
+  else if (b.tipo === 'camera') { cameraVisivel = !cameraVisivel; aplicarCamadas(); }
+  else if (b.tipo === 'caneta') {
+    canetaAtiva = !canetaAtiva;
+    if (!canetaAtiva) for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; m.querDesde = 0; }   // quem estava desenhando para na hora
+  }
+  b.piscaAte = piscaAte = performance.now() + 220;
 }
+
+// No celular chegam menos quadros por segundo; a suavização é mais leve para o cursor não ficar para trás da mão
+const SUAVE_CORTE = MOVEL ? 2.0 : 1.2, SUAVE_BETA = MOVEL ? 0.05 : 0.02;
 
 // ---------- suavização (filtro One Euro): firme quando a mão está lenta, ágil quando está rápida ----------
 class Suave {
-  constructor(corteMin = 1.2, beta = 0.02) { this.corteMin = corteMin; this.beta = beta; this.t = null; }
+  constructor(corteMin = SUAVE_CORTE, beta = SUAVE_BETA) { this.corteMin = corteMin; this.beta = beta; this.t = null; }
   reiniciar() { this.t = null; }
   passo(v, t) {
     if (this.t === null) { this.t = t; this.v = v; this.dv = 0; return v; }
@@ -201,21 +1122,236 @@ function aviso(texto, mostrarBotao) {
   el('abrir').hidden = !mostrarBotao;
 }
 
-async function carregarDetector() {
-  const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-  detector = await HandLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" },
-    runningMode: "VIDEO",
-    numHands: 2
+// Recalcula as medidas da lousa para o formato atual da janela (ao abrir, girar o celular ou redimensionar)
+function ajustarTela() {
+  const lw = tela.clientWidth || window.innerWidth, lh = tela.clientHeight || window.innerHeight;
+  if (!lw || !lh) return;
+  const prop = lw / lh;
+  if (prop >= 1) { H = 720; W = Math.round(720 * prop); } else { W = 720; H = Math.round(720 / prop); }
+  const dpr = Math.min(window.devicePixelRatio || 1, MOVEL ? 1.5 : 2);       // no celular, menos pixels para desenhar a cada quadro
+  const pl = Math.round(lw * dpr), pa = Math.round(lh * dpr);
+  if (tela.width !== pl || tela.height !== pa) { tela.width = pl; tela.height = pa; }     // mexer no tamanho apaga a lousa: só quando muda
+  chaveItens = null; chavePainel = null; pedirDesenho();
+  PAINEL.k = MOVEL ? 1.3 : 1;
+  PAINEL.x = W >= 1000 ? 110 : 80; PAINEL.y = W >= 1000 ? 70 : 190;   // na tela em pé os botões do topo ocupam duas linhas
+  for (const it of itens) if (it.tipo !== 'traco') {              // formas que ficaram fora da tela voltam para dentro
+    it.x = Math.min(W - 20, Math.max(20, it.x)); it.y = Math.min(H - 20, Math.max(20, it.y));
+  }
+}
+
+// Onde a imagem da câmera cai na lousa: preenche a tela toda, cortando a sobra, sem esticar
+function enquadre() {
+  const vw = video.videoWidth || W, vh = video.videoHeight || H;
+  const e = Math.max(W / vw, H / vh), dw = vw * e, dh = vh * e;
+  return { ox: (W - dw) / 2, oy: (H - dh) / 2, dw, dh };
+}
+
+// ---------- rastreador: escolha automática do que é mais rápido neste aparelho ----------
+// Duas coisas mudam muito de um aparelho para outro, e não há como saber de antemão qual ganha:
+//   - o processador: o gráfico (GPU) costuma ser várias vezes mais rápido, mas em máquina sem placa gráfica de verdade é muito pior;
+//   - a imagem entregue ao rastreador: direta da câmera, ou uma cópia reduzida.
+// Por isso a página mede nos primeiros segundos de uso:
+//   1. começa no processador comum, que funciona em todo lugar, e mede as fontes de imagem;
+//   2. se o resultado não for bom o bastante, faz uma prova curta do processador gráfico, e desiste dela ao primeiro sinal de lentidão;
+//   3. fica com o mais rápido. O botão na Ajuda troca à mão.
+const URL_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const URL_MODELO = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+const NOME_PROCESSADOR = { GPU: 'gráfico (GPU)', CPU: 'comum (CPU)' };
+const BOM_O_BASTANTE = 25;          // ms: se o processador comum rastreia nesse tempo, nem vale provar o gráfico
+const LADO_DETECCAO = 640;          // lado maior da cópia reduzida; abaixo disso o rastreador não fica mais rápido
+const AQUECIMENTO = 12, QUADROS_POR_FONTE = 10;
+const FONTES = ['direta', 'reduzida', 'reduzida em memória'];
+const PROVA_AQUECIMENTO = 4, PROVA_QUADROS = 12;     // a prova do processador gráfico: os primeiros quadros preparam, os seguintes contam
+
+let arquivosWasm = null;
+const detectores = { GPU: null, CPU: null };
+const resultados = { GPU: null, CPU: null };    // { ms, fonte } medido para cada processador
+let delegado = null;                // processador em uso: 'GPU' ou 'CPU'
+let escolha = 'automática';         // 'automática' enquanto a página decide; 'decidida'; ou 'manual' depois que o botão é usado
+let prova = null;                   // { n, soma, qtd } enquanto o processador gráfico está em prova
+let processador = '';
+
+// Procurar uma segunda mão custa caro: enquanto só uma aparece, o rastreador refaz a busca completa a cada quadro.
+// Por isso o celular começa com uma mão só; o botão na Ajuda liga a segunda.
+let duasMaos = !MOVEL;
+
+async function criarDetector(d) {
+  if (!detectores[d]) detectores[d] = await HandLandmarker.createFromOptions(arquivosWasm, {
+    baseOptions: { modelAssetPath: URL_MODELO, delegate: d }, runningMode: "VIDEO", numHands: duasMaos ? 2 : 1
   });
+  return detectores[d];
+}
+
+function usar(d, fonteConhecida) {
+  delegado = d; detector = detectores[d]; processador = NOME_PROCESSADOR[d];
+  msRastreio = 0; porSegundo = 0;
+  fonte = fonteConhecida || 'testando'; teste = novoTeste();
+  rotuloProcessador();
+}
+
+// A decisão fica guardada no navegador: nas próximas vezes a página já abre no processador escolhido, sem medir de novo
+const CHAVE_ESCOLHA = 'quadro-no-ar.processador';
+function lembrar() { try { localStorage.setItem(CHAVE_ESCOLHA, delegado); } catch (e) { /* sem armazenamento: mede de novo na próxima vez */ } }
+function lembrado() { try { const v = localStorage.getItem(CHAVE_ESCOLHA); return v === 'GPU' || v === 'CPU' ? v : null; } catch (e) { return null; } }
+
+// Sem placa gráfica de verdade, o "processador gráfico" do navegador é um programa imitando uma placa, e é lentíssimo: nem vale a prova
+function placaGraficaDeVerdade() {
+  try {
+    const c = document.createElement('canvas'), g = c.getContext('webgl2') || c.getContext('webgl');
+    if (!g) return false;
+    const ext = g.getExtension('WEBGL_debug_renderer_info'), nome = ext ? String(g.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+    return !/swiftshader|llvmpipe|software|basic render/i.test(nome);
+  } catch (e) { return false; }
+}
+
+async function carregarDetector() {
+  arquivosWasm = await FilesetResolver.forVisionTasks(URL_WASM);
+  const antes = lembrado();
+  if (antes === 'GPU') {
+    try { await criarDetector('GPU'); escolha = 'decidida'; usar('GPU'); return; } catch (e) { /* não deu desta vez: segue pelo comum e mede de novo */ }
+  }
+  await criarDetector('CPU');
+  if (antes === 'CPU') escolha = 'decidida';
+  usar('CPU');
+}
+
+function descartar(d) { try { if (detectores[d]) detectores[d].close(); } catch (e) { /* já fechado */ } detectores[d] = null; }
+function decidir() { escolha = 'decidida'; prova = null; lembrar(); rotuloProcessador(); }
+
+// Chamado quando termina a medição das fontes de imagem para o processador em uso
+function fimDaMedicao(ms) {
+  resultados[delegado] = { ms, fonte };
+  if (escolha !== 'automática') return;
+  if (delegado === 'GPU') { descartar('CPU'); decidir(); return; }      // o gráfico já passou na prova; agora tem também a melhor fonte
+  if (ms <= BOM_O_BASTANTE || resultados.GPU) { decidir(); return; }
+  if (!placaGraficaDeVerdade()) { resultados.GPU = { ms: Infinity, fonte: 'direta' }; decidir(); return; }
+  criarDetector('GPU')                                                   // o comum está lento: põe o gráfico à prova
+    .then(() => { if (escolha === 'automática') { usar('GPU', 'direta'); prova = { n: 0, soma: 0, qtd: 0 }; } })
+    .catch(() => { resultados.GPU = { ms: Infinity, fonte: 'direta' }; decidir(); });
+}
+
+function reprovarGPU() {
+  resultados.GPU = { ms: Infinity, fonte: 'direta' };
+  usar('CPU', resultados.CPU ? resultados.CPU.fonte : null);
+  descartar('GPU');
+  if (escolha === 'automática') decidir(); else { prova = null; rotuloProcessador(); }
+}
+
+// Um quadro da prova do processador gráfico. Sem placa gráfica de verdade cada quadro leva segundos: a prova acaba no primeiro sinal.
+function registrarProva(ms) {
+  const cpu = resultados.CPU.ms;
+  prova.n++;
+  if (ms > (prova.n === 1 ? 4000 : 1000)) { reprovarGPU(); return; }    // o primeiro quadro prepara o processador gráfico e pode demorar
+  if (prova.n <= PROVA_AQUECIMENTO) return;
+  prova.soma += ms; prova.qtd++;
+  const media = prova.soma / prova.qtd;
+  if (prova.qtd >= 3 && media > cpu * 1.5) { reprovarGPU(); return; }
+  if (prova.qtd >= PROVA_QUADROS) {
+    if (media < cpu * 0.85) { prova = null; usar('GPU'); }               // aprovado: falta só medir a melhor fonte de imagem para ele
+    else reprovarGPU();
+  }
+}
+
+// O rastreador falhou no meio do uso (acontece com o processador gráfico em alguns aparelhos): volta para o comum
+let trocando = false;
+async function socorro() {
+  if (trocando || delegado === 'CPU') return;
+  trocando = true;
+  try { await criarDetector('CPU'); reprovarGPU(); } catch (e) { /* fica como está */ }
+  trocando = false;
+}
+
+function rotuloProcessador() {
+  const b = el('btProcessador'); if (!b) return;
+  b.textContent = 'Processador: ' + processador + (prova ? ', em prova…' : escolha === 'automática' ? ', medindo…' : escolha === 'manual' ? ', escolhido à mão' : ', o mais rápido aqui') + ' (toque para trocar)';
+}
+async function trocarProcessador() {
+  if (trocando) return;
+  trocando = true; escolha = 'manual'; prova = null;
+  const alvo = delegado === 'GPU' ? 'CPU' : 'GPU';
+  try { await criarDetector(alvo); usar(alvo, resultados[alvo] && isFinite(resultados[alvo].ms) ? resultados[alvo].fonte : null); lembrar(); }
+  catch (e) { recado('Este aparelho não conseguiu usar o processador ' + NOME_PROCESSADOR[alvo] + '.', 6000); rotuloProcessador(); }
+  trocando = false;
+}
+
+function rotuloDuasMaos() { el('btDuasMaos').textContent = duasMaos ? 'Duas mãos: ligado (toque para usar uma só, mais rápido)' : 'Duas mãos: desligado (toque para ligar)'; }
+async function alternarDuasMaos() {
+  duasMaos = !duasMaos; rotuloDuasMaos();
+  for (const d of ['GPU', 'CPU']) { try { if (detectores[d]) await detectores[d].setOptions({ numHands: duasMaos ? 2 : 1 }); } catch (e) { /* mantém a configuração anterior */ } }
+}
+
+// Medição das fontes de imagem: um quadro de cada, em rodízio, para todas medirem a mesma cena
+let telaDeteccao = null, telaDeteccaoMem = null;
+let fonte = 'testando';             // 'testando' ou uma das FONTES
+function novoTeste() { return { n: 0, soma: [0, 0, 0], qtd: [0, 0, 0], vez: 0, largura: video.videoWidth }; }
+let teste = { n: 0, soma: [0, 0, 0], qtd: [0, 0, 0], vez: 0, largura: 0 };
+
+function registrarTeste(ms) {
+  if (teste.largura !== video.videoWidth) {     // câmera nova ou aparelho girado: mede as fontes de novo
+    teste = novoTeste(); fonte = 'testando'; return;
+  }
+  if (fonte !== 'testando') return;
+  const grande = Math.max(video.videoWidth, video.videoHeight) > LADO_DETECCAO;      // imagem pequena: só existe a fonte direta
+  if (++teste.n > AQUECIMENTO) { teste.soma[teste.vez] += ms; teste.qtd[teste.vez]++; }
+  teste.vez = grande ? (teste.vez + 1) % FONTES.length : 0;
+  if (teste.n >= AQUECIMENTO + QUADROS_POR_FONTE * (grande ? FONTES.length : 1)) {
+    const medias = teste.soma.map((v, i) => teste.qtd[i] ? v / teste.qtd[i] : Infinity);
+    let melhor = 0;
+    for (let i = 1; i < medias.length; i++) if (medias[i] < medias[melhor] * 0.9 && medias[i] < medias[0] * 0.9) melhor = i;   // a cópia só entra se ganhar com folga
+    fonte = FONTES[melhor];
+    fimDaMedicao(medias[melhor]);
+  }
+}
+
+function fonteDeteccao() {
+  const vw = video.videoWidth, vh = video.videoHeight, maior = Math.max(vw, vh);
+  const qual = fonte === 'testando' ? FONTES[teste.vez] : fonte;
+  if (qual === 'direta' || maior <= LADO_DETECCAO) return video;
+  const k = LADO_DETECCAO / maior, l = Math.round(vw * k), a = Math.round(vh * k);
+  // "em memória": cópia guardada na memória comum em vez de na placa gráfica; em alguns aparelhos o rastreador lê essa mais depressa
+  const emMemoria = qual === 'reduzida em memória';
+  let c = emMemoria ? telaDeteccaoMem : telaDeteccao;
+  if (!c) { c = document.createElement('canvas'); if (emMemoria) telaDeteccaoMem = c; else telaDeteccao = c; }
+  if (c.width !== l || c.height !== a) { c.width = l; c.height = a; }
+  c.getContext('2d', emMemoria ? { willReadFrequently: true } : undefined).drawImage(video, 0, 0, l, a);
+  return c;
+}
+
+// Medidas de desempenho, mostradas na Ajuda
+let msRastreio = 0, porSegundo = 0, ultimaDeteccao = 0, ultimoPainelDesempenho = 0;
+function medir(ms, agora) {
+  msRastreio = msRastreio ? msRastreio * 0.9 + ms * 0.1 : ms;
+  if (ultimaDeteccao) { const f = 1000 / Math.max(1, agora - ultimaDeteccao); porSegundo = porSegundo ? porSegundo * 0.9 + f * 0.1 : f; }
+  ultimaDeteccao = agora;
+  if (leituraVisivel && agora - ultimoPainelDesempenho > 300) {
+    ultimoPainelDesempenho = agora;
+    el('desempenho').textContent = 'rastreamento ' + msRastreio.toFixed(0) + ' ms · ' + porSegundo.toFixed(0) + ' por segundo · processador ' + processador
+      + '\ncâmera ' + video.videoWidth + '×' + video.videoHeight + ' · lousa ' + tela.width + '×' + tela.height + ' · ' + (duasMaos ? 'duas mãos' : 'uma mão')
+      + ' · imagem ' + (fonte === 'testando' ? 'em teste' : fonte)
+      + (escolha === 'automática' ? '\nmedindo o que é mais rápido neste aparelho…' : '');
+  }
+}
+
+// Sem toques na tela o celular apagaria o visor no meio do uso
+let telaAcesa = null;
+async function manterTelaAcesa() {
+  try { if ('wakeLock' in navigator && document.visibilityState === 'visible') telaAcesa = await navigator.wakeLock.request('screen'); } catch (e) { /* sem suporte ou negado */ }
 }
 
 async function abrirCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    aviso('Este endereço não tem acesso à câmera. No celular a página precisa estar hospedada em um endereço https://; abrir o arquivo direto do aparelho não funciona.', false);
+    return;
+  }
   aviso('Abrindo a câmera…', false);
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false });
+    // Câmera frontal. No celular, imagem menor e 30 quadros por segundo, para o rastreamento não engasgar.
+    const pedido = MOVEL ? { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
+                         : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } };
+    const stream = await navigator.mediaDevices.getUserMedia({ video: pedido, audio: false });
     video.srcObject = stream;
     await video.play();
+    manterTelaAcesa();
     el('status').hidden = true;
     requestAnimationFrame(quadro);
   } catch (e) {
@@ -241,7 +1377,9 @@ function atribuirMaos(deteccoes, agora) {
   });
   for (const m of maos) if (!vistas.has(m)) m.lm = null;
   for (const m of maos) processarMao(m, agora);
+  const antes = maos.length;
   maos = maos.filter(m => m.lm || agora - m.semDesde <= 300);
+  if (antes || maos.length) pedirDesenho();     // com mão na tela (ou acabando de sair), a lousa precisa ser redesenhada
 }
 
 // Mesma saída do detector.fingersUp do cvzone, mas medida em relação ao punho e à palma,
@@ -338,7 +1476,7 @@ function processarMao(m, agora) {
   const afast2 = dist(lm[12], lm[16]) / palma;
   const inclin = inclinacaoPalma(lm, palma);
   if (inclin > PALMA_CIMA) m.palmaCima = true; else if (inclin < PALMA_BAIXO) m.palmaCima = false;
-  m.leitura = '[' + dedos.join(',') + ']  pinça ' + abertura.toFixed(2) + (m.pinca ? ' (fechada)' : '') + '  dobra ' + dobra.toFixed(2)
+  if (leituraVisivel) m.leitura = '[' + dedos.join(',') + ']  pinça ' + abertura.toFixed(2) + (m.pinca ? ' (fechada)' : '') + '  dobra ' + dobra.toFixed(2)
             + '\n   ind-médio ' + afast.toFixed(2) + '  méd-anelar ' + afast2.toFixed(2) + '  palma ' + (m.palmaCima ? 'cima' : 'baixo') + ' (' + inclin.toFixed(2) + ')'
             + (m.travada ? '  TRAVADA' : '');
 
@@ -475,18 +1613,20 @@ function processarMao(m, agora) {
     m.podeClicar = false;
   }
 
-  // ---- borracha ----
+  // ---- borracha (só com "Caneta e borracha" ligado no painel) ----
   if (m.modoDoisDedos === 'borracha') {
-    const pb = meio(lm[8], lm[12]);
-    m.borracha = [m.bx.passo(pb[0], agora), m.by.passo(pb[1], agora)];
     pausarTraco(m, agora, null, true);
     m.podeClicar = false;
-    apagar(m.borracha);
+    if (canetaAtiva) {
+      const pb = meio(lm[8], lm[12]);
+      m.borracha = [m.bx.passo(pb[0], agora), m.by.passo(pb[1], agora)];
+      apagar(m.borracha);
+    }
     return;
   }
 
-  // ---- desenhar ----
-  if (d === '01000' && !noPainel(x, y)) {
+  // ---- desenhar (só com "Caneta e borracha" ligado no painel; desligado, o gesto só aponta e clica) ----
+  if (canetaAtiva && d === '01000' && !noPainel(x, y)) {
     if (!m.tracoAtual) {
       // espera o gesto firmar por 80 ms, para não deixar um ponto solto ao passar por ele
       if (!m.querDesde) m.querDesde = agora;
@@ -502,7 +1642,7 @@ function processarMao(m, agora) {
     pausarTraco(m, agora, dedos[1] === 1 && !noPainel(x, y) ? [x, y] : null, noPainel(x, y));
   }
 
-  if (querLimpar && !m.limpou) {
+  if (querLimpar && canetaAtiva && !m.limpou) {          // o gesto de limpar tudo acompanha a caneta; o botão Limpar vale sempre
     if (!m.limparDesde) m.limparDesde = agora;
     if (agora - m.limparDesde >= FIRMEZA_LIMPAR) { limpar(); m.limpou = true; }   // só apaga de novo depois de desfazer o gesto
   }
@@ -542,9 +1682,9 @@ function desenharTraco(t) {
 
 const presa = it => maos.some(m => m.agarrada === it || (m.giro && m.giro.forma === it) || (m.redim && m.redim.forma === it));
 
-function desenharItens() {
+function desenharItens(lista) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (const it of itens) {
+  for (const it of lista) {
     if (it.tipo === 'traco') { desenharTraco(it); continue; }
     ctx.save();
     const e = it.esc || 1;
@@ -562,15 +1702,17 @@ function desenharItens() {
 }
 
 function desenharPainel(agora, sobre) {
-  retArred(PAINEL.x, PAINEL.y, PAINEL.w, PAINEL.h, 12);
+  ctx.save();
+  ctx.translate(PAINEL.x, PAINEL.y); ctx.scale(PAINEL.k, PAINEL.k);
+  retArred(0, 0, PAINEL.w, PAINEL.h, 12);
   ctx.fillStyle = '#e4e6ec'; ctx.fill();
   ctx.strokeStyle = '#c9ccd6'; ctx.lineWidth = 2; ctx.stroke();
 
   ctx.fillStyle = '#4a5060'; ctx.font = '600 13px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  for (const [texto, dy] of ROTULOS) ctx.fillText(texto, PAINEL.x + 10, PAINEL.y + dy);
+  for (const [texto, dy] of ROTULOS) ctx.fillText(texto, 10, dy);
 
   for (const b of botoes) {
-    const selecionado = (b.tipo === 'cor' && b.valor === cor) || (b.tipo === 'tam' && b.valor === tam) || (b.tipo === 'camera' && cameraVisivel);
+    const selecionado = (b.tipo === 'cor' && b.valor === cor) || (b.tipo === 'tam' && b.valor === tam) || (b.tipo === 'camera' && cameraVisivel) || (b.tipo === 'caneta' && canetaAtiva);
     const piscando = b.piscaAte && agora < b.piscaAte;
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
 
@@ -583,9 +1725,9 @@ function desenharPainel(agora, sobre) {
     } else if (b.tipo === 'forma') {
       caminhoForma(b.valor, cx, cy, 0.17);
       ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-    } else if (b.tipo === 'limpar' || b.tipo === 'camera') {
+    } else if (b.tipo === 'limpar' || b.tipo === 'camera' || b.tipo === 'caneta') {
       ctx.fillStyle = '#111111'; ctx.font = '600 13px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(b.tipo === 'limpar' ? 'Limpar' : 'Câmera', cx, cy);
+      ctx.fillText(b.tipo === 'limpar' ? 'Limpar' : b.tipo === 'camera' ? 'Câmera' : 'Caneta e borracha', cx, cy);
     }
 
     retArred(b.x, b.y, b.w, b.h, 8);
@@ -598,6 +1740,7 @@ function desenharPainel(agora, sobre) {
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
     }
   }
+  ctx.restore();
 }
 
 function anel(x, y, r) {
@@ -641,7 +1784,58 @@ function desenharCursor(m) {
   if (!apontando(m)) return;
   const [x, y] = m.ponta;
   anel(x, y, Math.max(tam / 2, 6) + 3);
-  if (m.dedos[0] === 0 && !noPainel(x, y)) bolinha(m.ponta, Math.max(tam / 2, 3), cor);
+  if (canetaAtiva && m.dedos[0] === 0 && !noPainel(x, y)) bolinha(m.ponta, Math.max(tam / 2, 3), cor);    // ponto colorido = vai desenhar
+}
+
+// ---------- redesenho econômico ----------
+// A lousa só é redesenhada quando algo mudou. E o que não muda de um quadro para o outro fica guardado em imagens prontas:
+//   - os traços e formas parados (tudo, menos o traço sendo desenhado e as formas presas a uma mão);
+//   - o painel de botões.
+let sujo = true;                    // há algo novo para desenhar
+let piscaAte = 0;                   // fim do realce do último botão clicado
+let leituraVisivel = false;         // a Ajuda está aberta? (as leituras só são montadas quando alguém vai ver)
+function pedirDesenho() { sujo = true; }
+
+const telaItens = document.createElement('canvas'), telaPainel = document.createElement('canvas');
+let chaveItens = null, chavePainel = null, temItensParados = false;
+
+function itensAtivos() {            // o que está mudando agora, na ordem em que aparece na lousa
+  const s = new Set();
+  for (const m of maos) { if (m.tracoAtual) s.add(m.tracoAtual); if (m.agarrada) s.add(m.agarrada); if (m.giro && m.giro.forma) s.add(m.giro.forma); if (m.redim && m.redim.forma) s.add(m.redim.forma); }
+  return s.size ? itens.filter(i => s.has(i)) : [];
+}
+
+function guardarItensParados(ativos) {
+  // a imagem guardada vale enquanto a lista de itens e o conjunto de itens ativos forem os mesmos
+  const c = chaveItens;
+  if (c && c.itens === itens && c.n === itens.length && c.ativos.length === ativos.length && c.ativos.every((a, i) => a === ativos[i])) return;
+  chaveItens = { itens, n: itens.length, ativos };
+  if (telaItens.width !== tela.width || telaItens.height !== tela.height) { telaItens.width = tela.width; telaItens.height = tela.height; }
+  const parados = ativos.length ? itens.filter(i => !ativos.includes(i)) : itens;
+  temItensParados = parados.length > 0;
+  ctx = telaItens.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, telaItens.width, telaItens.height);
+  ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
+  desenharItens(parados);
+  ctx = ctxTela;
+}
+
+function guardarPainel(agora, sobre) {
+  const e = tela.width / W, margem = 4;
+  const piscando = botoes.map((b, i) => b.piscaAte && agora < b.piscaAte ? i : '').join('');
+  const chave = [cor, tam, cameraVisivel, canetaAtiva, PAINEL.k, PAINEL.x, PAINEL.y, e, botoes.map((b, i) => sobre.has(b) ? i : '').join(','), piscando].join('|');
+  const ox = Math.round((PAINEL.x - margem) * e), oy = Math.round((PAINEL.y - margem) * e);
+  if (chave !== chavePainel) {
+    chavePainel = chave;
+    const l = Math.ceil((PAINEL.w * PAINEL.k + margem * 2) * e) + 1, a = Math.ceil((PAINEL.h * PAINEL.k + margem * 2) * e) + 1;
+    if (telaPainel.width !== l || telaPainel.height !== a) { telaPainel.width = l; telaPainel.height = a; }
+    ctx = telaPainel.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, l, a);
+    ctx.setTransform(e, 0, 0, e, -ox, -oy);
+    desenharPainel(agora, sobre);
+    ctx = ctxTela;
+  }
+  return [ox, oy];
 }
 
 function quadro() {
@@ -649,33 +1843,52 @@ function quadro() {
   if (video.readyState < 2) return;
   const agora = performance.now();
 
-  if (video.currentTime !== ultimoTempo) {
+  if (video.currentTime !== ultimoTempo) {      // chegou um quadro novo da câmera
     ultimoTempo = video.currentTime;
-    const res = detector.detectForVideo(video, agora);
-    const deteccoes = (res.landmarks || []).map(mao => mao.map(p => [(1 - p.x) * W, p.y * H]));
+    const t0 = performance.now();
+    let res;
+    try { res = detector.detectForVideo(fonteDeteccao(), agora); }
+    catch (e) { res = { landmarks: [] }; socorro(); }
+    const gasto = performance.now() - t0;
+    const emUso = delegado;
+    if (prova) registrarProva(gasto); else registrarTeste(gasto);
+    if (emUso === delegado) medir(gasto, agora);              // se o processador acabou de ser trocado, essa medida era do anterior
+    const q = enquadre();                       // mesma conta que o navegador usa para exibir a câmera (preencher e cortar a sobra), espelhada
+    const deteccoes = (res.landmarks || []).map(mao => mao.map(p => [q.ox + (1 - p.x) * q.dw, q.oy + p.y * q.dh]));
     atribuirMaos(deteccoes, agora);
-    const linhas = maos.filter(m => m.lm).sort((a, b) => a.punho[0] - b.punho[0]).map((m, i) => 'mão ' + (i + 1) + ': ' + m.leitura);
-    el('leitura').textContent = linhas.length ? linhas.join('\n') : 'sem mão';
+    if (leituraVisivel) {
+      const linhas = maos.filter(m => m.lm).sort((a, b) => a.punho[0] - b.punho[0]).map((m, i) => 'mão ' + (i + 1) + ': ' + m.leitura);
+      el('leitura').textContent = linhas.length ? linhas.join('\n') : 'sem mão';
+    }
   }
 
-  // A tela tem 1920x1080 pixels reais; tudo é desenhado em coordenadas 1280x720
-  ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#fbfbf8';
-  ctx.fillRect(0, 0, W, H);
-  if (cameraVisivel) {
-    ctx.save(); ctx.globalAlpha = 0.9; ctx.scale(-1, 1); ctx.drawImage(video, -W, 0, W, H); ctx.restore();
-  }
-  desenharItens();
+  if (piscaAte && agora >= piscaAte) { piscaAte = 0; sujo = true; }   // o realce do botão clicado acabou: redesenha para apagá-lo
+  if (!sujo) return;                            // nada mudou desde o último desenho
+  sujo = false;
 
+  const ativos = itensAtivos();
+  guardarItensParados(ativos);
   const sobre = new Set();
   for (const m of maos) if (apontando(m)) { const b = botaoEm(m.ponta[0], m.ponta[1]); if (b) sobre.add(b); }
-  desenharPainel(agora, sobre);
+  const [px, py] = guardarPainel(agora, sobre);
+
+  ctx = ctxTela;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, tela.width, tela.height);                      // transparente: a câmera e a página aparecem por baixo
+  if (temItensParados) ctx.drawImage(telaItens, 0, 0);
+  // Daqui em diante, coordenadas lógicas W x H; a transformação leva para os pixels reais da tela
+  ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
+  desenharItens(ativos);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(telaPainel, px, py);
+  ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
   for (const m of maos) desenharCursor(m);
 }
 
-// ---------- mouse e teclado ----------
-tela.addEventListener('pointerdown', e => {      // o mouse também clica nos botões
+// ---------- mouse, toque e teclado ----------
+tela.addEventListener('pointerdown', e => {      // o mouse e o toque também clicam nos botões
+  e.preventDefault();
   const r = tela.getBoundingClientRect();
   clicar((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
 });
@@ -683,9 +1896,38 @@ function telaCheia() {
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen().catch(() => {});
 }
+if (!document.fullscreenEnabled) el('btCheia').hidden = true;      // o iPhone não tem tela cheia para páginas
+window.addEventListener('resize', ajustarTela);
+window.addEventListener('orientationchange', () => setTimeout(ajustarTela, 200));
+document.addEventListener('visibilitychange', () => {                // ao voltar para a aba: reacende a tela e retoma a câmera
+  if (document.visibilityState !== 'visible') return;
+  manterTelaAcesa();
+  if (video.srcObject && video.paused) video.play().catch(() => {});
+});
+ajustarTela();
+aplicarCamadas();
 el('btCheia').addEventListener('click', telaCheia);
-el('btAjuda').addEventListener('click', () => { el('ajuda').hidden = !el('ajuda').hidden; });
-addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') telaCheia(); });
+el('btAjuda').addEventListener('click', () => { el('ajuda').hidden = !el('ajuda').hidden; leituraVisivel = !el('ajuda').hidden; });
+el('btDuasMaos').addEventListener('click', alternarDuasMaos);
+el('btProcessador').addEventListener('click', trocarProcessador);
+rotuloDuasMaos();
+addEventListener('keydown', e => {
+  if (e.key === 'f' || e.key === 'F') telaCheia();
+  else if (paginaAtual >= 0 && (e.key === 'ArrowRight' || e.key === 'PageDown')) { e.preventDefault(); irParaPagina(paginaAtual + 1); }
+  else if (paginaAtual >= 0 && (e.key === 'ArrowLeft' || e.key === 'PageUp')) { e.preventDefault(); irParaPagina(paginaAtual - 1); }
+});
+el('btAnt').addEventListener('click', () => irParaPagina(paginaAtual - 1));
+el('btProx').addEventListener('click', () => irParaPagina(paginaAtual + 1));
+el('btFechar').addEventListener('click', fecharPaginas);
+{
+  window.ModuloUpload.ligar({
+    botao: el('btEnviar'),
+    areaDeSoltar: document.body,
+    aoProgresso: texto => recado(texto, 0),
+    aoReceber: paginasRecebidas,
+    aoErro: e => recado('Não foi possível ler os arquivos (' + (e && e.message || 'erro') + ').', 8000)
+  });
+}
 el('abrir').addEventListener('click', abrirCamera);
 
 try {
