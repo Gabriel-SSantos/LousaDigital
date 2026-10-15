@@ -66,14 +66,14 @@
     <li><b>Palma aberta:</b> palma virada para a câmera, dedos para cima e juntos, polegar junto à mão, parada por 1,5 s: abre o menu no centro da palma. Tirar a mão do lugar fecha o menu.</li>
     <li><b>Lápis:</b> no menu, aponte só o indicador e pouse-o 1 s sobre o lápis: o lápis fica liberado e o menu fecha. Repetir o mesmo caminho desliga o lápis (com ele ligado, o trapézio do lápis aparece contornado). Com ele liberado, desenha com só o indicador erguido e a ponta do polegar (ponto 4) passada da junta dele (ponto 3) para o lado do mínimo; se não, o lápis fica parado.</li>
     <li><b>Clique:</b> aponte só o indicador para um botão (ele ganha contorno) e abaixe o dedo, fechando a mão.</li>
-    <li><b>Imagens:</b> importe pelo item Imagens do menu (com mouse ou toque). Junte as mãos, com as bases dos mindinhos (pontos 17) a até 300 de distância, por 1,5 s: abre o carrossel. Clique numa imagem para abri-la; dá para abrir várias. Pinça sobre a imagem arrasta (a base do mínimo precisa estar do lado de fora do polegar: à direita dele na mão direita, à esquerda na esquerda); pinça na bolinha azul do canto muda o tamanho. Com o mouse, arraste do mesmo jeito.</li>
+    <li><b>Imagens:</b> importe pelo item Imagens do menu (com mouse ou toque). Junte as mãos, com as bases dos mindinhos (pontos 17) a até 300 de distância, por 1,5 s: abre o carrossel, com as imagens e as apresentações de slides. Clique numa imagem para abri-la (dá para abrir várias) ou numa apresentação para abrir os slides; com os slides abertos, o X na bolinha vermelha, abaixo da lixeira, fecha os slides. Pinça sobre a imagem arrasta (a base do mínimo precisa estar do lado de fora do polegar: à direita dele na mão direita, à esquerda na esquerda); pinça na bolinha azul do canto muda o tamanho. Com o mouse, arraste do mesmo jeito.</li>
     <li><b>Zoom no slide:</b> igual às imagens: pinça arrasta, pinça na bolinha azul do canto muda o tamanho, duas pinças fazem zoom a partir do centro. Com o mouse, arraste e use a rodinha. Painel Lousa: "Slide no tamanho original".</li>
     <li><b>Passador de slides:</b> só o mindinho erguido, com a mão inclinada para o mindinho apontar na diagonal para cima (entre 20° e 70°). Com a palma para a câmera, avança um slide; com as costas, volta um. Para passar outro, desfaça e refaça o sinal.</li>
     <li><b>Lixeira:</b> o botão abaixo de Tela cheia apaga tudo o que está na tela. Arrastar uma imagem até ela (a lixeira cresce e fica vermelha) e soltar apaga só essa imagem.</li>
     <li><b>Zoom com as duas mãos:</b> pinça com as duas mãos na mesma imagem; afaste para aumentar e aproxime para diminuir, a partir do centro entre as pinças.</li>
     <li><b>Borracha:</b> com o lápis liberado, indicador e médio erguidos e colados, com a mesma regra do polegar; passe sobre o traço.</li>
     <li><b>Menu:</b> a barra da esquerda, com mouse ou toque. Paleta = cores, lápis = caneta e espessura, triângulo = formas, folhas = lousa e slides. A seta de baixo recolhe a barra.</li>
-    <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx ou imagens. Troque de página com ◀ ▶ ou as setas do teclado.</li>
+    <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O quadro guarda no navegador uma cópia de cada imagem e .pptx enviado, com o caminho do arquivo, e reabre tudo ao recarregar, também no celular.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
@@ -841,7 +841,11 @@
   // Interface pública
   // ---------------------------------------------------------------------------------------------------------
 
-  // Recebe uma lista de arquivos (FileList ou array de File) e devolve { paginas, recusados }.
+  // Caminho relativo do arquivo: o navegador só informa o nome (ou a subpasta, quando se escolhe uma pasta inteira),
+  // então o caminho vale a partir da pasta onde está o quadro-no-ar.html. `caminhoRelativo` é posto por quem reabre um arquivo guardado.
+  function caminhoDe(arq) { return arq.caminhoRelativo || arq.webkitRelativePath || arq.name; }
+
+  // Recebe uma lista de arquivos (FileList ou array de File) e devolve { paginas, recusados }. Cada página leva o `caminho` do seu arquivo.
   async function receber(arquivos, opcoes) {
     const aoProgresso = opcoes && opcoes.aoProgresso, paginas = [], recusados = [];
     const lista = Array.from(arquivos || []).sort((a, b) => ordemNatural(a.name, b.name));
@@ -850,8 +854,10 @@
       if (motivo) { recusados.push({ nome: arq.name, motivo }); continue; }
       try {
         if (aoProgresso) aoProgresso('Lendo ' + arq.name + '…');
-        if (tipoDe(arq) === 'imagem') paginas.push(await lerImagem(arq));
-        else paginas.push(...await lerPptx(arq, aoProgresso));
+        const lidas = tipoDe(arq) === 'imagem' ? [await lerImagem(arq)] : await lerPptx(arq, aoProgresso);
+        const caminho = caminhoDe(arq);
+        for (const p of lidas) { p.caminho = caminho; p.fonte = arq; }   // fonte: o arquivo original, para guardar como anexo
+        paginas.push(...lidas);
       } catch (e) {
         recusados.push({ nome: arq.name, motivo: (e && e.message) || 'Não foi possível ler o arquivo.' });
       }
@@ -889,7 +895,7 @@
     return { abrir: () => entrada.click(), enviar: processar };
   }
 
-  global.ModuloUpload = { receber, ligar, ACEITA, EXTENSOES_DE_IMAGEM: EXT_IMAGEM.slice(), TAMANHO_MAXIMO };
+  global.ModuloUpload = { receber, ligar, caminhoDe, ACEITA, EXTENSOES_DE_IMAGEM: EXT_IMAGEM.slice(), TAMANHO_MAXIMO };
 })(window);
 </script>
 
@@ -962,6 +968,7 @@ function montarInterface() {
   // lixeira no canto de cima à direita, logo abaixo dos botões Enviar arquivo, Ajuda e Tela cheia (que ficam no HTML)
   const css = W / (tela.clientWidth || W), baseBotoes = (el('btEnviar').getBoundingClientRect().bottom || 44) * css;
   r.push({ tipo: 'lixeira', x: W - lado - 10 * css, y: baseBotoes + 10 * css, w: lado, h: lado });
+  if (paginaAtual >= 0) r.push({ tipo: 'fecharSlides', x: W - lado - 10 * css, y: baseBotoes + 10 * css + lado + 14 * K, w: lado, h: lado });   // X vermelho, abaixo da lixeira
   if (!menuAberto) { r.push({ tipo: 'expandir', x: 0, y: H - 80 * K, w: 30 * K, h: 60 * K }); if (carrossel) montarCarrossel(r); return r; }
   r.push({ tipo: 'barra', x: 0, y: 0, w: B, h: H });
   MENU.forEach((m, i) => r.push({ tipo: 'menu', valor: m.id, x: (B - lado) / 2, y: 56 * K + i * 54 * K, w: lado, h: lado }));
@@ -999,7 +1006,8 @@ function trocarItens(novos) { itens = novos; for (const m of maos) { m.tracoAtua
 const LADO_IMAGEM = 500;            // lado maior da imagem ao abrir
 const SENSIBILIDADE_TAMANHO = 0.46;  // quanto do movimento da bolinha vira mudança de tamanho (1 = acompanha o dedo)
 const RAIO_ALCA = 11;               // raio da bolinha azul no canto da imagem
-let galeria = [];                   // imagens importadas: { nome, largura, altura, imagem }
+let galeria = [];                   // imagens importadas: { nome, caminho, largura, altura, imagem }
+let apresentacoes = [];             // slides importados, um por arquivo: { nome, caminho, paginas }
 let carrossel = null;               // { pagina } enquanto o carrossel está aberto
 let arrastePonteiro = null;         // arraste com mouse ou toque: { item, modo, ... }
 
@@ -1011,15 +1019,40 @@ entradaImagens.addEventListener('change', async () => {
   if (!arqs.length) return;
   recado('Lendo as imagens…', 0);
   const r = await window.ModuloUpload.receber(arqs);
-  galeria.push(...r.paginas.filter(p => p.origem === 'imagem'));
+  adicionarNaGaleria(r.paginas.filter(p => p.origem === 'imagem'));
+  guardarArquivos();
   const linhas = [r.paginas.length ? r.paginas.length + (r.paginas.length === 1 ? ' imagem importada.' : ' imagens importadas.') + ' Junte as mãos para abrir o carrossel.' : 'Nenhuma imagem importada.'];
   for (const x of r.recusados) linhas.push(x.nome + ': ' + x.motivo);
   recado(linhas.join('\n'), r.recusados.length ? 10000 : 4000);
   chavePainel = null; pedirDesenho();
 });
 
+// Um arquivo com o mesmo caminho substitui o anterior, em vez de aparecer duas vezes
+function adicionarNaGaleria(lista) {
+  for (const g of lista) guardarAnexo(g);
+  for (const g of lista) { const i = galeria.findIndex(x => x.caminho && x.caminho === g.caminho); if (i >= 0) galeria[i] = g; else galeria.push(g); }
+  chavePainel = null; pedirDesenho();
+}
+function adicionarApresentacao(caminho, pgs) {
+  if (pgs[0]) guardarAnexo(pgs[0]);
+  const a = { nome: caminho.split('/').pop(), caminho, paginas: pgs };
+  const i = apresentacoes.findIndex(x => x.caminho === caminho);
+  if (i >= 0) { if (paginas === apresentacoes[i].paginas) fecharPaginas(); apresentacoes[i] = a; } else apresentacoes.push(a);
+  chavePainel = null; pedirDesenho();
+  return a;
+}
+// O carrossel mostra as imagens e, depois delas, as apresentações (com o primeiro slide como miniatura)
+function entradasDoCarrossel() {
+  return galeria.map(g => ({ tipo: 'imagem', g })).concat(apresentacoes.map(a => ({ tipo: 'slides', a, g: a.paginas[0] })));
+}
+function abrirEntrada(i) {
+  const e = entradasDoCarrossel()[i]; if (!e) return;
+  if (e.tipo === 'imagem') abrirImagem(galeria.indexOf(e.g));
+  else { abrirApresentacao(e.a); fecharCarrossel(); }
+}
+
 function abrirCarrossel() {
-  if (!galeria.length) { recado('Nenhuma imagem importada ainda. Use o item Imagens do menu.', 4000); return; }
+  if (!galeria.length && !apresentacoes.length) { recado('Nenhuma imagem ou slide importado ainda. Use o item Imagens do menu ou o botão Enviar arquivo.', 4000); return; }
   carrossel = { pagina: 0 }; painelAberto = null; pedirDesenho();
 }
 function fecharCarrossel() { carrossel = null; pedirDesenho(); }
@@ -1037,9 +1070,10 @@ function abrirImagem(i) {
 function montarCarrossel(r) {
   const box = 150 * K, alt = 110 * K, gap = 12 * K, pad = 16 * K, titulo = 26 * K, seta = 34 * K;
   const cabem = Math.max(1, Math.min(6, Math.floor((W - 160 * K - pad * 2 + gap) / (box + gap))));
-  const paginasC = Math.ceil(galeria.length / cabem), comSetas = paginasC > 1;
+  const total = galeria.length + apresentacoes.length;
+  const paginasC = Math.ceil(total / cabem), comSetas = paginasC > 1;
   carrossel.pagina = Math.min(carrossel.pagina, paginasC - 1);
-  const n = Math.min(cabem, galeria.length - carrossel.pagina * cabem);
+  const n = Math.min(cabem, total - carrossel.pagina * cabem);
   const larg = pad * 2 + cabem * box + (cabem - 1) * gap + (comSetas ? (seta + gap) * 2 : 0), altura = pad * 2 + titulo + alt;
   const x = (W - larg) / 2, y = (H - altura) / 2;
   r.push({ tipo: 'carrossel', x, y, w: larg, h: altura, paginas: paginasC });
@@ -1050,6 +1084,110 @@ function montarCarrossel(r) {
     r.push({ tipo: 'carrosselAnt', x: x + pad, y: y + pad + titulo + (alt - seta) / 2, w: seta, h: seta });
     r.push({ tipo: 'carrosselProx', x: x + larg - pad - seta, y: y + pad + titulo + (alt - seta) / 2, w: seta, h: seta });
   }
+}
+
+// ---------- caminhos guardados: imagens e slides voltam ao recarregar a página ----------
+// Guarda no navegador o caminho relativo de cada arquivo importado. Ao abrir o quadro de novo, cada um é buscado
+// a partir da pasta do quadro-no-ar.html; os que não forem achados continuam guardados para a próxima vez.
+const CHAVE_ARQUIVOS = 'quadro-no-ar.arquivos';
+let naoEncontrados = [];            // { tipo, caminho } guardados que não abriram nesta sessão
+function arquivosGuardados() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CHAVE_ARQUIVOS) || '[]');
+    return Array.isArray(v) ? v.filter(a => a && typeof a.caminho === 'string' && a.caminho && (a.tipo === 'imagem' || a.tipo === 'slides')) : [];
+  } catch (e) { return []; }
+}
+function guardarArquivos() {
+  const lista = galeria.filter(g => g.caminho).map(g => ({ tipo: 'imagem', caminho: g.caminho }))
+    .concat(apresentacoes.map(a => ({ tipo: 'slides', caminho: a.caminho })));
+  for (const f of naoEncontrados) if (!lista.some(a => a.tipo === f.tipo && a.caminho === f.caminho)) lista.push(f);
+  try { localStorage.setItem(CHAVE_ARQUIVOS, JSON.stringify(lista)); } catch (e) { /* sem armazenamento: só vale nesta sessão */ }
+}
+const urlDoCaminho = c => c.split('/').map(encodeURIComponent).join('/');
+
+// Anexos: o próprio arquivo (.pptx ou imagem) fica guardado no navegador (IndexedDB), com o caminho como chave.
+// Assim tudo volta ao recarregar, inclusive no celular e com o quadro aberto direto do disco.
+let promessaBanco = null;
+function banco() {
+  if (!promessaBanco) promessaBanco = new Promise((ok, falha) => {
+    const req = indexedDB.open('quadro-no-ar', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('anexos');
+    req.onsuccess = () => ok(req.result);
+    req.onerror = () => falha(req.error);
+  });
+  return promessaBanco;
+}
+async function noBanco(modo, fazer) {
+  const db = await banco();
+  return new Promise((ok, falha) => {
+    const t = db.transaction('anexos', modo), req = fazer(t.objectStore('anexos'));
+    t.oncomplete = () => ok(req && req.result); t.onerror = () => falha(t.error); t.onabort = () => falha(t.error);
+  });
+}
+// Guarda o arquivo original da página (uma vez por caminho). Vai como ArrayBuffer, que todo navegador de celular aceita.
+async function guardarAnexo(pg) {
+  const arq = pg.fonte; pg.fonte = null;
+  if (!arq || !pg.caminho) return;
+  try {
+    const dados = await arq.arrayBuffer();
+    await noBanco('readwrite', st => st.put({ nome: arq.name, tipo: arq.type, dados }, pg.caminho));
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});   // pede para o navegador não apagar sozinho
+  } catch (e) { recado('Não consegui guardar ' + pg.caminho + ' no navegador (sem espaço ou modo anônimo). Ele vale só até fechar a página.', 6000); }
+}
+async function lerAnexo(caminho) {
+  try {
+    const v = await noBanco('readonly', st => st.get(caminho));
+    if (!v || !v.dados) return null;
+    const arq = new File([v.dados], v.nome || caminho.split('/').pop(), { type: v.tipo || '' });
+    arq.caminhoRelativo = caminho;
+    return arq;
+  } catch (e) { return null; }
+}
+// Busca o arquivo pelo caminho relativo e devolve as páginas lidas, com o caminho guardado
+async function reabrir(a) {
+  let arq = await lerAnexo(a.caminho);          // primeiro o anexo guardado no navegador
+  if (arq) {
+    const r = await window.ModuloUpload.receber([arq]);
+    for (const p of r.paginas) p.fonte = null;  // já está guardado
+    if (r.paginas.length) return r.paginas;
+    arq = null;
+  }
+  try {                                          // sem anexo: procura o arquivo pelo caminho, na pasta do quadro
+    const resp = await fetch(urlDoCaminho(a.caminho));
+    if (resp.ok) { const blob = await resp.blob(); arq = new File([blob], a.caminho.split('/').pop(), { type: blob.type }); arq.caminhoRelativo = a.caminho; }
+  } catch (e) { /* aberto direto do disco (file://): o navegador não deixa buscar; imagens ainda dão certo pelo <img> */ }
+  if (arq) {
+    const r = await window.ModuloUpload.receber([arq]);
+    if (r.paginas.length) return r.paginas;      // achado pela pasta: guardarAnexo o salva para as próximas vezes
+  }
+  if (a.tipo !== 'imagem' && !/\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(a.caminho)) return null;
+  const img = new Image();
+  img.src = urlDoCaminho(a.caminho);
+  try { await img.decode(); } catch (e) { return null; }
+  const l = img.naturalWidth || 1280, h = img.naturalHeight || 720, k = Math.min(1, 2560 / Math.max(l, h));
+  const c = document.createElement('canvas'); c.width = Math.round(l * k); c.height = Math.round(h * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return [{ nome: a.caminho.split('/').pop(), origem: 'imagem', arquivo: a.caminho.split('/').pop(), indice: 0, largura: c.width, altura: c.height, imagem: c, avisos: [], caminho: a.caminho }];
+}
+async function restaurarArquivos() {
+  const lista = arquivosGuardados();
+  if (!lista.length) return;
+  const faltando = [];
+  for (const a of lista) {
+    let pgs = null;
+    try { pgs = await reabrir(a); } catch (e) { pgs = null; }
+    if (!pgs || !pgs.length) { faltando.push(a); continue; }
+    for (const p of pgs) p.caminho = a.caminho;
+    if (a.tipo === 'imagem') adicionarNaGaleria(pgs.slice(0, 1));
+    else adicionarApresentacao(a.caminho, pgs);
+  }
+  naoEncontrados = faltando;
+  const achados = lista.length - faltando.length, linhas = [];
+  if (achados) linhas.push(achados + (achados === 1 ? ' arquivo guardado foi reaberto.' : ' arquivos guardados foram reabertos.') + ' Junte as mãos para abrir o carrossel.');
+  if (faltando.length) {
+    linhas.push('Não encontrei na pasta do quadro: ' + faltando.map(a => a.caminho).join(', ') + '.');
+  }
+  recado(linhas.join('\n'), faltando.length ? 10000 : 4000);
 }
 
 function retanguloDaLixeira() { return montarInterface().find(r => r.tipo === 'lixeira'); }
@@ -1172,11 +1310,30 @@ function irParaPagina(i) {
   atualizarBarra();
 }
 
+// Abre uma apresentação no primeiro slide (ou no slide em que estava, se já foi aberta antes)
+function abrirApresentacao(a) {
+  if (!a || !a.paginas.length || (paginaAtual >= 0 && paginas === a.paginas)) return;     // já está aberta
+  if (paginaAtual >= 0) {                                          // guarda os desenhos e o slide de onde sai
+    anotacoes.set(paginas[paginaAtual], itens);
+    const anterior = apresentacoes.find(x => x.paginas === paginas);
+    if (anterior) anterior.ultima = paginaAtual;
+  } else itensSemPagina = itens;
+  paginas = a.paginas;
+  paginaAtual = Math.min(a.ultima || 0, paginas.length - 1);
+  trocarItens(anotacoes.get(paginas[paginaAtual]) || []);
+  atualizarBarra();
+}
+
+// Fecha os slides e volta para a lousa. A apresentação continua no carrossel, com os desenhos de cada slide.
 function fecharPaginas() {
   if (paginaAtual < 0) return;
-  paginas = []; anotacoes.clear(); vistas.clear(); paginaAtual = -1;
+  anotacoes.set(paginas[paginaAtual], itens);
+  const a = apresentacoes.find(x => x.paginas === paginas);
+  if (a) a.ultima = paginaAtual;
+  paginas = []; paginaAtual = -1;
   trocarItens(itensSemPagina);
   atualizarBarra();
+  chavePainel = null; pedirDesenho();
 }
 
 let relogioRecado = 0;
@@ -1189,10 +1346,14 @@ function recado(texto, ms) {
 function paginasRecebidas(resultado) {
   const novas = resultado.paginas, linhas = [];
   if (novas.length) {
-    const primeira = paginas.length;
-    paginas.push(...novas);                     // novos envios entram depois das páginas já abertas
-    irParaPagina(primeira);
-    atualizarBarra();
+    // cada arquivo vira uma apresentação no carrossel; a primeira já abre
+    const grupos = new Map();
+    for (const p of novas) { if (!grupos.has(p.caminho)) grupos.set(p.caminho, []); grupos.get(p.caminho).push(p); }
+    let primeira = null;
+    for (const [caminho, pgs] of grupos) { const a = adicionarApresentacao(caminho, pgs); primeira = primeira || a; }
+    if (paginaAtual >= 0) fecharPaginas();
+    abrirApresentacao(primeira);
+    guardarArquivos();
     linhas.push(novas.length === 1 ? '1 página recebida.' : novas.length + ' páginas recebidas.');
     const avisos = new Set(), comAviso = novas.filter(pg => pg.avisos.length);
     for (const pg of comAviso) for (const a of pg.avisos) avisos.add(a);
@@ -1212,7 +1373,8 @@ function clicar(x, y) {
   el('clique').textContent = x + ', ' + y + (b ? ' → ' + (b.valor && b.tipo !== 'cor' ? b.valor : b.tipo) : ' → nada');
   if (!b) { painelAberto = null; return; }      // clique fora do menu fecha o painel aberto
   if (b.tipo === 'barra' || b.tipo === 'painel' || b.tipo === 'carrossel') return;
-  if (b.tipo === 'miniatura') { abrirImagem(b.valor); return; }
+  if (b.tipo === 'miniatura') { abrirEntrada(b.valor); return; }
+  if (b.tipo === 'fecharSlides') { fecharPaginas(); return; }
   if (b.tipo === 'carrosselFechar') { fecharCarrossel(); return; }
   if (b.tipo === 'carrosselAnt' || b.tipo === 'carrosselProx') {
     const n = montarInterface().find(e => e.tipo === 'carrossel').paginas;
@@ -2067,7 +2229,7 @@ function desenharBotao(b, agora, sobre) {
   ctx.fillStyle = '#111111'; ctx.font = '600 ' + Math.round(13 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   if (b.tipo === 'tam') { ctx.beginPath(); ctx.arc(cx, cy, b.valor / 2 + 1, 0, Math.PI * 2); ctx.fill(); }
   else if (b.tipo === 'forma') { caminhoForma(b.valor, cx, cy, 0.17 * K); ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke(); }
-  else if (b.tipo !== 'cor') ctx.fillText({ limpar: 'Limpar', camera: 'Câmera', caneta: 'Caneta e borracha: ' + (canetaAtiva ? 'ligadas' : 'desligadas'), ant: '◀  Slide anterior', prox: 'Próximo slide  ▶', importar: 'Importar imagens', zoomOriginal: 'Slide no tamanho original', galeria: 'Abrir carrossel (' + galeria.length + (galeria.length === 1 ? ' imagem)' : ' imagens)') }[b.tipo], cx, cy);
+  else if (b.tipo !== 'cor') ctx.fillText({ limpar: 'Limpar', camera: 'Câmera', caneta: 'Caneta e borracha: ' + (canetaAtiva ? 'ligadas' : 'desligadas'), ant: '◀  Slide anterior', prox: 'Próximo slide  ▶', importar: 'Importar imagens', zoomOriginal: 'Slide no tamanho original', galeria: 'Abrir carrossel (' + (galeria.length + apresentacoes.length) + (galeria.length + apresentacoes.length === 1 ? ' item)' : ' itens)') }[b.tipo], cx, cy);
   retArred(b.x, b.y, b.w, b.h, 8 * K);
   if (selecionado) { ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 4; }
   else if (sobre.has(idDe(b))) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 3; }
@@ -2089,14 +2251,25 @@ function desenharInterface(agora, sobre) {
       ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 12 * K;
       retArred(r.x, r.y, r.w, r.h, 14 * K); ctx.fillStyle = 'rgba(15,18,26,0.6)'; ctx.fill(); ctx.restore();
       ctx.fillStyle = '#ffffff'; ctx.font = '600 ' + Math.round(13 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-      ctx.fillText('Imagens' + (r.paginas > 1 ? '  ·  ' + (carrossel.pagina + 1) + ' de ' + r.paginas : '') + '  ·  aponte e clique para abrir', r.x + 16 * K, r.y + 26 * K);
+      ctx.fillText('Imagens e slides' + (r.paginas > 1 ? '  ·  ' + (carrossel.pagina + 1) + ' de ' + r.paginas : '') + '  ·  aponte e clique para abrir', r.x + 16 * K, r.y + 26 * K);
       continue;
     }
     if (r.tipo === 'miniatura') {
-      const g = galeria[r.valor], sob = sobre.has(idDe(r));
+      const ent = entradasDoCarrossel()[r.valor], g = ent.g, sob = sobre.has(idDe(r));
       retArred(r.x, r.y, r.w, r.h, 8 * K); ctx.fillStyle = '#ffffff'; ctx.fill();
       const e = Math.min((r.w - 8 * K) / g.largura, (r.h - 8 * K) / g.altura), l = g.largura * e, a = g.altura * e;
       ctx.drawImage(g.imagem, r.x + (r.w - l) / 2, r.y + (r.h - a) / 2, l, a);
+      if (ent.tipo === 'slides') {                          // faixa com o nome e o número de slides
+        const fx = 22 * K;
+        ctx.save(); retArred(r.x, r.y, r.w, r.h, 8 * K); ctx.clip();
+        ctx.fillStyle = 'rgba(15,18,26,0.78)'; ctx.fillRect(r.x, r.y + r.h - fx, r.w, fx);
+        ctx.fillStyle = '#ffffff'; ctx.font = '600 ' + Math.round(11 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        let rot = ent.a.nome.replace(/\.pptx$/i, '');
+        const fim = '  ·  ' + ent.a.paginas.length + (ent.a.paginas.length === 1 ? ' slide' : ' slides');
+        while (rot.length > 1 && ctx.measureText(rot + '…' + fim).width > r.w - 12 * K) rot = rot.slice(0, -1);
+        ctx.fillText((rot === ent.a.nome.replace(/\.pptx$/i, '') ? rot : rot + '…') + fim, r.x + 6 * K, r.y + r.h - fx / 2);
+        ctx.restore();
+      }
       retArred(r.x, r.y, r.w, r.h, 8 * K); ctx.strokeStyle = sob ? '#1f5fe0' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = sob ? 4 * K : 2; ctx.stroke();
       continue;
     }
@@ -2104,6 +2277,16 @@ function desenharInterface(agora, sobre) {
       fundoDoIcone(r.x, r.y, r.w, r.h, sobre.has(idDe(r)) ? '#111111' : null);
       ctx.fillStyle = '#111111'; ctx.font = '700 ' + Math.round(r.w * 0.55) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(r.tipo === 'carrosselFechar' ? '×' : r.tipo === 'carrosselAnt' ? '‹' : '›', r.x + r.w / 2, r.y + r.h / 2 + 1);
+      continue;
+    }
+    if (r.tipo === 'fecharSlides') {                        // bolinha vermelha com X branco: fecha os slides
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2, raio = r.w / 2, sob = sobre.has(idDe(r));
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 6 * K; ctx.shadowOffsetY = 1.5 * K;
+      ctx.beginPath(); ctx.arc(cx, cy, raio, 0, Math.PI * 2); ctx.fillStyle = sob ? '#c4141e' : '#e5202b'; ctx.fill(); ctx.restore();
+      if (sob) { ctx.beginPath(); ctx.arc(cx, cy, raio + 3 * K, 0, Math.PI * 2); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5 * K; ctx.stroke(); }
+      const t = raio * 0.42;
+      ctx.beginPath(); ctx.moveTo(cx - t, cy - t); ctx.lineTo(cx + t, cy + t); ctx.moveTo(cx + t, cy - t); ctx.lineTo(cx - t, cy + t);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3.5 * K; ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
       continue;
     }
     if (r.tipo === 'expandir') {                            // aba que sobra com o menu recolhido
@@ -2249,7 +2432,7 @@ function guardarItensParados(ativos) {
 function guardarPainel(agora, sobre) {
   const e = tela.width / W, partes = montarInterface();
   const piscando = Array.from(piscaPor).filter(([, t]) => t > agora).map(([id]) => id).join(',');
-  const chave = [arrastandoSobreLixeira(), tela.clientWidth, carrossel ? carrossel.pagina : -1, galeria.length, menuAberto, painelAberto, cor, tam, cameraVisivel, canetaAtiva, paginaAtual, paginas.length, W, H, e, Array.from(sobre).join(','), piscando].join('|');
+  const chave = [arrastandoSobreLixeira(), tela.clientWidth, carrossel ? carrossel.pagina : -1, galeria.length, apresentacoes.length, menuAberto, painelAberto, cor, tam, cameraVisivel, canetaAtiva, paginaAtual, paginas.length, W, H, e, Array.from(sobre).join(','), piscando].join('|');
   if (chave !== chavePainel) {
     chavePainel = chave;
     const direita = Math.max(...partes.map(r => r.x + r.w)) + 4;
@@ -2404,6 +2587,7 @@ el('btFechar').addEventListener('click', fecharPaginas);
   });
 }
 el('abrir').addEventListener('click', abrirCamera);
+restaurarArquivos();
 
 try {
   await carregarDetector();
