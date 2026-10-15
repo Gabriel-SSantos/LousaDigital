@@ -15,7 +15,7 @@
   .stage { position: fixed; inset: 0; background: #fbfbf8; overflow: hidden; }
   #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); pointer-events: none; }
   #camadaPagina { position: absolute; inset: 0; pointer-events: none; }
-  #camadaPagina canvas { object-fit: contain; }
+  #camadaPagina canvas { position: absolute; width: auto; height: auto; }   /* posição e tamanho vêm do zoom do slide (aplicarVistaSlide) */
   #tela { position: absolute; inset: 0; }
   /* A lousa ocupa a janela inteira, em qualquer formato: deitada, em pé, celular ou computador */
   canvas { display: block; width: 100%; height: 100%; touch-action: none; }
@@ -64,7 +64,14 @@
 <div id="ajuda" hidden>
   <ul>
     <li><b>Palma aberta:</b> palma virada para a câmera, dedos para cima e juntos, polegar junto à mão, parada por 1,5 s: abre o menu no centro da palma. Tirar a mão do lugar fecha o menu.</li>
-    <li><b>Lápis:</b> no menu, aponte só o indicador e pouse-o 1 s sobre o lápis: o lápis fica liberado e o menu fecha. Com ele liberado, só o indicador erguido desenha.</li>
+    <li><b>Lápis:</b> no menu, aponte só o indicador e pouse-o 1 s sobre o lápis: o lápis fica liberado e o menu fecha. Repetir o mesmo caminho desliga o lápis (com ele ligado, o trapézio do lápis aparece contornado). Com ele liberado, desenha com só o indicador erguido e a ponta do polegar (ponto 4) passada da junta dele (ponto 3) para o lado do mínimo; se não, o lápis fica parado.</li>
+    <li><b>Clique:</b> aponte só o indicador para um botão (ele ganha contorno) e abaixe o dedo, fechando a mão.</li>
+    <li><b>Imagens:</b> importe pelo item Imagens do menu (com mouse ou toque). Junte as mãos, com as bases dos mindinhos (pontos 17) a até 300 de distância, por 1,5 s: abre o carrossel. Clique numa imagem para abri-la; dá para abrir várias. Pinça sobre a imagem arrasta (a base do mínimo precisa estar do lado de fora do polegar: à direita dele na mão direita, à esquerda na esquerda); pinça na bolinha azul do canto muda o tamanho. Com o mouse, arraste do mesmo jeito.</li>
+    <li><b>Zoom no slide:</b> igual às imagens: pinça arrasta, pinça na bolinha azul do canto muda o tamanho, duas pinças fazem zoom a partir do centro. Com o mouse, arraste e use a rodinha. Painel Lousa: "Slide no tamanho original".</li>
+    <li><b>Passador de slides:</b> só o mindinho erguido, com a mão inclinada para o mindinho apontar na diagonal para cima (entre 20° e 70°). Com a palma para a câmera, avança um slide; com as costas, volta um. Para passar outro, desfaça e refaça o sinal.</li>
+    <li><b>Lixeira:</b> o botão abaixo de Tela cheia apaga tudo o que está na tela. Arrastar uma imagem até ela (a lixeira cresce e fica vermelha) e soltar apaga só essa imagem.</li>
+    <li><b>Zoom com as duas mãos:</b> pinça com as duas mãos na mesma imagem; afaste para aumentar e aproxime para diminuir, a partir do centro entre as pinças.</li>
+    <li><b>Borracha:</b> com o lápis liberado, indicador e médio erguidos e colados, com a mesma regra do polegar; passe sobre o traço.</li>
     <li><b>Menu:</b> a barra da esquerda, com mouse ou toque. Paleta = cores, lápis = caneta e espessura, triângulo = formas, folhas = lousa e slides. A seta de baixo recolhe a barra.</li>
     <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx ou imagens. Troque de página com ◀ ▶ ou as setas do teclado.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
@@ -932,7 +939,8 @@ const MENU = [
   { id: 'cores', titulo: 'Cores' },
   { id: 'traco', titulo: 'Caneta e traço' },
   { id: 'formas', titulo: 'Formas' },
-  { id: 'lousa', titulo: 'Lousa' }
+  { id: 'lousa', titulo: 'Lousa' },
+  { id: 'imagens', titulo: 'Imagens' }
 ];
 let menuAberto = true;
 let painelAberto = null;            // id do item do menu cujo painel está aberto, ou null
@@ -942,15 +950,19 @@ function conteudoDoPainel(id) {
   if (id === 'cores') return { colunas: 3, botoes: CORES.map((c, i) => ({ tipo: 'cor', valor: c, col: i % 3, lin: Math.floor(i / 3), vao: 1 })) };
   if (id === 'traco') return { colunas: 4, botoes: [{ tipo: 'caneta', col: 0, lin: 0, vao: 4 }].concat(TAMANHOS.map((t, i) => ({ tipo: 'tam', valor: t, col: i, lin: 1, vao: 1 }))) };
   if (id === 'formas') return { colunas: 4, botoes: FORMAS.map((f, i) => ({ tipo: 'forma', valor: f, col: i, lin: 0, vao: 1 })) };
+  if (id === 'imagens') return { colunas: 4, botoes: [{ tipo: 'importar', col: 0, lin: 0, vao: 4 }, { tipo: 'galeria', col: 0, lin: 1, vao: 4 }] };
   const b = [{ tipo: 'limpar', col: 0, lin: 0, vao: 2 }, { tipo: 'camera', col: 2, lin: 0, vao: 2 }];
-  if (paginaAtual >= 0) b.push({ tipo: 'ant', col: 0, lin: 1, vao: 2 }, { tipo: 'prox', col: 2, lin: 1, vao: 2 });   // trocar de slide com o gesto
+  if (paginaAtual >= 0) b.push({ tipo: 'ant', col: 0, lin: 1, vao: 2 }, { tipo: 'prox', col: 2, lin: 1, vao: 2 }, { tipo: 'zoomOriginal', col: 0, lin: 2, vao: 4 });   // trocar de slide com o gesto
   return { colunas: 4, botoes: b };
 }
 
 // Tudo o que o menu ocupa na lousa, em coordenadas lógicas. Os itens com `tipo` de botão respondem ao clique.
 function montarInterface() {
   const r = [], B = 56 * K, lado = 44 * K;
-  if (!menuAberto) { r.push({ tipo: 'expandir', x: 0, y: H - 80 * K, w: 30 * K, h: 60 * K }); return r; }
+  // lixeira no canto de cima à direita, logo abaixo dos botões Enviar arquivo, Ajuda e Tela cheia (que ficam no HTML)
+  const css = W / (tela.clientWidth || W), baseBotoes = (el('btEnviar').getBoundingClientRect().bottom || 44) * css;
+  r.push({ tipo: 'lixeira', x: W - lado - 10 * css, y: baseBotoes + 10 * css, w: lado, h: lado });
+  if (!menuAberto) { r.push({ tipo: 'expandir', x: 0, y: H - 80 * K, w: 30 * K, h: 60 * K }); if (carrossel) montarCarrossel(r); return r; }
   r.push({ tipo: 'barra', x: 0, y: 0, w: B, h: H });
   MENU.forEach((m, i) => r.push({ tipo: 'menu', valor: m.id, x: (B - lado) / 2, y: 56 * K + i * 54 * K, w: lado, h: lado }));
   r.push({ tipo: 'recolher', x: (B - lado) / 2, y: H - lado - 16 * K, w: lado, h: lado });
@@ -958,6 +970,7 @@ function montarInterface() {
     const item = r.find(e => e.tipo === 'menu' && e.valor === painelAberto);
     montarPainel(r, painelAberto, (w, h) => [B + 10 * K, Math.max(8 * K, Math.min(H - h - 8 * K, item.y - 10 * K))]);   // ao lado do ícone
   }
+  if (carrossel) montarCarrossel(r);
   return r;
 }
 
@@ -979,7 +992,111 @@ function botaoEm(x, y) {            // o elemento clicável sob o ponto; o fundo
 }
 
 // Troca o conjunto de desenhos em uso; as mãos largam o que seguravam do conjunto anterior
-function trocarItens(novos) { itens = novos; for (const m of maos) { m.tracoAtual = null; m.pendentes = []; } pedirDesenho(); }
+function trocarItens(novos) { itens = novos; for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.agarrada = null; } arrastePonteiro = null; pedirDesenho(); }
+
+// ---------- imagens importadas, carrossel e imagem aberta ----------
+// Medidas na lousa (lado menor da tela = 720): numa tela 1280×720 são pixels de verdade; no celular encolhem na mesma proporção.
+const LADO_IMAGEM = 500;            // lado maior da imagem ao abrir
+const SENSIBILIDADE_TAMANHO = 0.46;  // quanto do movimento da bolinha vira mudança de tamanho (1 = acompanha o dedo)
+const RAIO_ALCA = 11;               // raio da bolinha azul no canto da imagem
+let galeria = [];                   // imagens importadas: { nome, largura, altura, imagem }
+let carrossel = null;               // { pagina } enquanto o carrossel está aberto
+let arrastePonteiro = null;         // arraste com mouse ou toque: { item, modo, ... }
+
+const entradaImagens = document.createElement('input');
+entradaImagens.type = 'file'; entradaImagens.multiple = true; entradaImagens.accept = 'image/*'; entradaImagens.hidden = true;
+document.body.appendChild(entradaImagens);
+entradaImagens.addEventListener('change', async () => {
+  const arqs = Array.from(entradaImagens.files); entradaImagens.value = '';
+  if (!arqs.length) return;
+  recado('Lendo as imagens…', 0);
+  const r = await window.ModuloUpload.receber(arqs);
+  galeria.push(...r.paginas.filter(p => p.origem === 'imagem'));
+  const linhas = [r.paginas.length ? r.paginas.length + (r.paginas.length === 1 ? ' imagem importada.' : ' imagens importadas.') + ' Junte as mãos para abrir o carrossel.' : 'Nenhuma imagem importada.'];
+  for (const x of r.recusados) linhas.push(x.nome + ': ' + x.motivo);
+  recado(linhas.join('\n'), r.recusados.length ? 10000 : 4000);
+  chavePainel = null; pedirDesenho();
+});
+
+function abrirCarrossel() {
+  if (!galeria.length) { recado('Nenhuma imagem importada ainda. Use o item Imagens do menu.', 4000); return; }
+  carrossel = { pagina: 0 }; painelAberto = null; pedirDesenho();
+}
+function fecharCarrossel() { carrossel = null; pedirDesenho(); }
+
+function abrirImagem(i) {
+  const g = galeria[i]; if (!g) return;
+  const e = LADO_IMAGEM / Math.max(g.largura, g.altura), w = g.largura * e, h = g.altura * e;
+  const abertas = itens.filter(it => it.tipo === 'imagem').length, desloc = (abertas % 6) * 30 * K;   // cada nova abre um pouco deslocada
+  itens.push({ tipo: 'imagem', img: g.imagem, x: (W - w) / 2 + desloc, y: (H - h) / 2 + desloc, w, h });
+  pedirDesenho();
+  fecharCarrossel();
+}
+
+// Carrossel: faixa no meio da tela com as miniaturas; setas quando não cabem todas
+function montarCarrossel(r) {
+  const box = 150 * K, alt = 110 * K, gap = 12 * K, pad = 16 * K, titulo = 26 * K, seta = 34 * K;
+  const cabem = Math.max(1, Math.min(6, Math.floor((W - 160 * K - pad * 2 + gap) / (box + gap))));
+  const paginasC = Math.ceil(galeria.length / cabem), comSetas = paginasC > 1;
+  carrossel.pagina = Math.min(carrossel.pagina, paginasC - 1);
+  const n = Math.min(cabem, galeria.length - carrossel.pagina * cabem);
+  const larg = pad * 2 + cabem * box + (cabem - 1) * gap + (comSetas ? (seta + gap) * 2 : 0), altura = pad * 2 + titulo + alt;
+  const x = (W - larg) / 2, y = (H - altura) / 2;
+  r.push({ tipo: 'carrossel', x, y, w: larg, h: altura, paginas: paginasC });
+  r.push({ tipo: 'carrosselFechar', x: x + larg - 30 * K, y: y + 6 * K, w: 24 * K, h: 24 * K });
+  const x0 = x + pad + (comSetas ? seta + gap : 0);
+  for (let k = 0; k < n; k++) { const i = carrossel.pagina * cabem + k; r.push({ tipo: 'miniatura', valor: i, x: x0 + k * (box + gap), y: y + pad + titulo, w: box, h: alt }); }
+  if (comSetas) {
+    r.push({ tipo: 'carrosselAnt', x: x + pad, y: y + pad + titulo + (alt - seta) / 2, w: seta, h: seta });
+    r.push({ tipo: 'carrosselProx', x: x + larg - pad - seta, y: y + pad + titulo + (alt - seta) / 2, w: seta, h: seta });
+  }
+}
+
+function retanguloDaLixeira() { return montarInterface().find(r => r.tipo === 'lixeira'); }
+function sobreLixeira(p) { const r = retanguloDaLixeira(); return !!(p && r && dentroDe(p, r, 12 * K)); }
+function jogarNaLixeira(item) {
+  const i = itens.indexOf(item);
+  if (i >= 0) { itens.splice(i, 1); piscaPor.set('lixeira:', piscaAte = performance.now() + 300); recado('Imagem apagada.', 1500); pedirDesenho(); }
+}
+// Algo está sendo arrastado por cima da lixeira? (ela fica com contorno vermelho)
+function arrastandoSobreLixeira() {
+  if (arrastePonteiro && arrastePonteiro.item.tipo === 'imagem' && sobreLixeira(arrastePonteiro.ultimo)) return true;
+  return maos.some(m => m.pinca && m.agarrada && m.agarrada.modo !== 'duplo' && m.agarrada.item.tipo === 'imagem' && sobreLixeira(m.pontoPinca));
+}
+
+function imagemEm(x, y) {                     // { item, modo: 'tamanho' | 'mover' } sob o ponto, a de cima primeiro
+  for (let i = itens.length - 1; i >= 0; i--) {
+    const it = itens[i];
+    if (it.tipo !== 'imagem') continue;
+    if (Math.hypot(x - (it.x + it.w), y - (it.y + it.h)) <= RAIO_ALCA * K * 2.2) return { item: it, modo: 'tamanho' };
+    if (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return { item: it, modo: 'mover' };
+  }
+  return null;
+}
+
+// Começa a mover ou a mudar o tamanho de uma imagem a partir do ponto p
+function pegarImagem(alvo, p) {
+  const it = alvo.item;
+  const d = Math.hypot(it.w, it.h);
+  return { item: it, modo: alvo.modo, dx: it.x - p[0], dy: it.y - p[1], p0: p, w0: it.w, h0: it.h, dir: [it.w / d, it.h / d], diag0: d };
+}
+
+// Aplica o movimento do ponto p à imagem presa. O tamanho cresce ou encolhe com a bolinha, mantendo a proporção,
+// com o canto de cima à esquerda parado; só uma parte do movimento vale (SENSIBILIDADE_TAMANHO), para o ajuste ser fino.
+function moverImagem(g, p) {
+  const it = g.item;
+  g.ultimo = p;
+  if (g.modo === 'mover') {
+    it.x = Math.min(W - 40, Math.max(40 - it.w, p[0] + g.dx));
+    it.y = Math.min(H - 40, Math.max(40 - it.h, p[1] + g.dy));
+  } else {
+    const avanço = (p[0] - g.p0[0]) * g.dir[0] + (p[1] - g.p0[1]) * g.dir[1];
+    const maximo = it.tipo === 'slide' ? 12 : Math.min((W - 14 * K - it.x) / g.w0, (H - 14 * K - it.y) / g.h0);   // na imagem a bolinha não sai da tela; o slide pode passar da tela
+    const k = Math.max(80 * K / Math.max(g.w0, g.h0), Math.min(maximo, (g.diag0 + avanço * SENSIBILIDADE_TAMANHO) / g.diag0));
+    it.w = g.w0 * k; it.h = g.h0 * k;
+  }
+  pedirDesenho();
+}
 function limpar() { novasFormas = 0; trocarItens([]); }
 
 // ---------- páginas enviadas: slides de .pptx e imagens ----------
@@ -996,9 +1113,47 @@ function aplicarCamadas() {
   video.style.visibility = cameraVisivel ? 'visible' : 'hidden';
   const camada = el('camadaPagina'), pg = paginas[paginaAtual];
   camada.style.opacity = OPACIDADE_PAGINA;
-  if (pg) { if (camada.firstChild !== pg.imagem) camada.replaceChildren(pg.imagem); }     // a página inteira, centralizada, sem cortar nem esticar
+  if (pg) { if (camada.firstChild !== pg.imagem) camada.replaceChildren(pg.imagem); }
   else camada.replaceChildren();
+  aplicarVistaSlide();
 }
+
+// ---------- zoom do slide ----------
+// Cada slide tem sua "vista": o retângulo em que aparece na tela, nas medidas da lousa. Começa inteiro e centralizado,
+// e muda como as imagens: pinça arrasta, pinça na bolinha azul do canto muda o tamanho, duas pinças fazem zoom
+// a partir do centro entre elas. Com o mouse: arrastar move e a rodinha faz zoom.
+const vistas = new Map();           // página -> { tipo: 'slide', x, y, w, h }
+function vistaInicial(pg) {
+  const e = Math.min(W / pg.largura, H / pg.altura), w = pg.largura * e, h = pg.altura * e;
+  return { tipo: 'slide', x: (W - w) / 2, y: (H - h) / 2, w, h };
+}
+function vistaAtual() {
+  const pg = paginas[paginaAtual];
+  if (!pg) return null;
+  if (!vistas.has(pg)) vistas.set(pg, vistaInicial(pg));
+  return vistas.get(pg);
+}
+let estiloVista = '';
+function aplicarVistaSlide() {
+  const v = vistaAtual(), pg = paginas[paginaAtual];
+  if (!v || !pg) return;
+  const k = (tela.clientWidth || W) / W;           // da medida da lousa para pixels da página
+  const novo = [v.x * k, v.y * k, v.w * k, v.h * k].map(n => n.toFixed(1)).join(',');
+  if (novo === estiloVista && pg.imagem.style.width) return;
+  estiloVista = novo;
+  Object.assign(pg.imagem.style, { left: v.x * k + 'px', top: v.y * k + 'px', width: v.w * k + 'px', height: v.h * k + 'px' });
+}
+function slideEm(x, y) {                       // { item: vista, modo } se o ponto está no slide aberto
+  const v = vistaAtual();
+  if (!v) return null;
+  const c = cantoDoSlide(v);
+  if (Math.hypot(x - c[0], y - c[1]) <= RAIO_ALCA * K * 2.2) return { item: v, modo: 'tamanho' };
+  if (x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h) return { item: v, modo: 'mover' };
+  return null;
+}
+// A bolinha fica no canto de baixo à direita do slide; se o canto estiver fora da tela, fica no ponto visível mais próximo
+function cantoDoSlide(v) { return [Math.min(v.x + v.w, W - 22 * K), Math.min(v.y + v.h, H - 22 * K)]; }
+const alvoEm = (x, y) => imagemEm(x, y) || slideEm(x, y);
 
 function atualizarBarra() {
   aplicarCamadas();
@@ -1019,7 +1174,7 @@ function irParaPagina(i) {
 
 function fecharPaginas() {
   if (paginaAtual < 0) return;
-  paginas = []; anotacoes.clear(); paginaAtual = -1;
+  paginas = []; anotacoes.clear(); vistas.clear(); paginaAtual = -1;
   trocarItens(itensSemPagina);
   atualizarBarra();
 }
@@ -1049,13 +1204,26 @@ function paginasRecebidas(resultado) {
 
 function desligarCaneta() { canetaAtiva = false; for (const m of maos) { m.tracoAtual = null; m.pendentes = []; } pedirDesenho(); }
 
+let cliqueDoPonteiro = false;       // o clique veio do mouse ou toque (e não do gesto)?
 function clicar(x, y) {
   pedirDesenho();
   x = Math.round(x); y = Math.round(y);
   const b = botaoEm(x, y);
   el('clique').textContent = x + ', ' + y + (b ? ' → ' + (b.valor && b.tipo !== 'cor' ? b.valor : b.tipo) : ' → nada');
   if (!b) { painelAberto = null; return; }      // clique fora do menu fecha o painel aberto
-  if (b.tipo === 'barra' || b.tipo === 'painel') return;
+  if (b.tipo === 'barra' || b.tipo === 'painel' || b.tipo === 'carrossel') return;
+  if (b.tipo === 'miniatura') { abrirImagem(b.valor); return; }
+  if (b.tipo === 'carrosselFechar') { fecharCarrossel(); return; }
+  if (b.tipo === 'carrosselAnt' || b.tipo === 'carrosselProx') {
+    const n = montarInterface().find(e => e.tipo === 'carrossel').paginas;
+    carrossel.pagina = (carrossel.pagina + (b.tipo === 'carrosselProx' ? 1 : n - 1)) % n; pedirDesenho(); return;
+  }
+  if (b.tipo === 'importar') {
+    // o navegador só abre a janela de arquivos a partir de um clique de mouse ou toque, não do gesto
+    if (cliqueDoPonteiro) entradaImagens.click(); else recado('Para escolher as imagens, clique em Importar imagens com o mouse ou toque.', 5000);
+  }
+  if (b.tipo === 'galeria') { painelAberto = null; abrirCarrossel(); return; }
+  if (b.tipo === 'zoomOriginal') { const pg = paginas[paginaAtual]; if (pg) vistas.set(pg, vistaInicial(pg)); pedirDesenho(); return; }
   piscaPor.set(idDe(b), piscaAte = performance.now() + 220);
   if (b.tipo === 'menu') painelAberto = painelAberto === b.valor ? null : b.valor;
   else if (b.tipo === 'recolher') { menuAberto = false; painelAberto = null; }
@@ -1069,7 +1237,7 @@ function clicar(x, y) {
     const cx = ((menuAberto ? 56 * K : 0) + W) / 2, cy = H / 2;      // nasce no meio da área livre, à direita do menu
     itens.push({ tipo: b.valor, x: cx - 70 + desloc, y: cy - 70 + desloc, cor, tam, rot: 0, esc: 1 });
   }
-  else if (b.tipo === 'limpar') limpar();
+  else if (b.tipo === 'limpar' || b.tipo === 'lixeira') limpar();   // a lixeira apaga tudo o que está na tela
   else if (b.tipo === 'camera') { cameraVisivel = !cameraVisivel; aplicarCamadas(); }
   else if (b.tipo === 'caneta') { if (canetaAtiva) desligarCaneta(); else canetaAtiva = true; }
 }
@@ -1096,6 +1264,8 @@ class Mao {
   constructor() {
     this.fx = new Suave(); this.fy = new Suave();       // ponta do indicador, suavizada
     this.gx = new Suave(); this.gy = new Suave();       // ponto entre polegar e indicador, suavizado
+    this.bx = new Suave(); this.by = new Suave();       // centro da borracha, suavizado
+    this.borracha = null;
     this.lm = null;                 // 21 pontos em coordenadas da lousa, ou null se sumiu neste quadro
     this.punho = [0, 0];
     this.dedos = null;              // [polegar, indicador, médio, anelar, mínimo], 1 = erguido
@@ -1105,12 +1275,16 @@ class Mao {
     this.medidas = null;            // ver processarMao
     this.palmaFrente = null;        // true = palma virada para a câmera
     this.abrirDesde = 0; this.abertaVista = 0;     // contagem do sinal da palma aberta
+    this.historico = []; this.ultimoApontar = 0; this.podeClicar = false;   // clique
+    this.pinca = false; this.agarrada = null;      // pinça e imagem presa nela
+    this.votosLado = {}; this.ladoFixo = null;
+    this.passadorDesde = 0; this.passadorVisto = 0; this.passadorFeito = false; this.passadorSentido = 0;   // passador de slides      // lado da mão, fixado pelos primeiros quadros
     this.tracoAtual = null; this.pendentes = []; this.inicioPausa = 0; this.querDesde = 0; this.esperaAte = 0;   // lápis
     this.semDesde = 0;
     this.leitura = '';
   }
   largarTudo() {                    // a mão sumiu de verdade: zera os filtros e encerra o traço
-    this.ponta = null; this.pontoPinca = null; this.medidas = null; this.tracoAtual = null; this.pendentes = [];
+    this.ponta = null; this.pontoPinca = null; this.medidas = null; this.tracoAtual = null; this.pendentes = []; this.borracha = null; this.pinca = false; this.agarrada = null;
     for (const f of [this.fx, this.fy, this.gx, this.gy]) f.reiniciar();
   }
 }
@@ -1134,7 +1308,7 @@ function ajustarTela() {
   const dpr = Math.min(window.devicePixelRatio || 1, MOVEL ? 1.5 : 2);       // no celular, menos pixels para desenhar a cada quadro
   const pl = Math.round(lw * dpr), pa = Math.round(lh * dpr);
   if (tela.width !== pl || tela.height !== pa) { tela.width = pl; tela.height = pa; }     // mexer no tamanho apaga a lousa: só quando muda
-  chaveItens = null; chavePainel = null; pedirDesenho();
+  chaveItens = null; chavePainel = null; vistas.clear(); estiloVista = ''; pedirDesenho();   // tela mudou de formato: os slides voltam ao enquadramento inicial
   for (const it of itens) if (it.tipo !== 'traco') {              // formas que ficaram fora da tela voltam para dentro
     it.x = Math.min(W - 20, Math.max(20, it.x)); it.y = Math.min(H - 20, Math.max(20, it.y));
   }
@@ -1396,6 +1570,9 @@ const SINAL_PALMA = 1;              // medido na foto da palma de frente (e na m
 const ESPERA_MENU = 1500;           // ms com o sinal para abrir o menu
 const ESPERA_OPCAO = 1000;          // ms com o indicador pousado numa opção do menu
 const TOLERANCIA_TRACO = 150;       // ms: falhas de leitura mais curtas que isso não quebram o traço
+const PINCA_FECHA = 0.18, PINCA_ABRE = 0.25;   // distância polegar-indicador (pontos 4 e 8) / palma: fecha abaixo, abre acima
+const DOBRA_MAXIMA = 0.6;           // indicador mais dobrado que isso é mão fechada, não pinça
+const JANELA_CLIQUE = 250;          // ms: o clique vale onde o indicador apontava pouco antes de abaixar
 const TOLERANCIA_SINAL = 250;       // ms de leitura falhando sem zerar a contagem
 const TOLERANCIA_FORA = 500;        // ms que a mão pode passar fora da área antes de o menu fechar
 const DEDOS_PARA_CIMA = 30;         // graus: inclinação máxima da mão em relação à vertical
@@ -1407,9 +1584,11 @@ const OPCOES_RADIAIS = [            // paleta no alto, lápis embaixo à esquerd
   { id: 'formas', angulo: 30 }
 ];
 let radial = null;                  // { mao, c, palma, area, foraDesde, mira }
-// O que cada opção faz quando o indicador pousa nela por 1 s. Opções sem ação ainda não respondem.
+// O que cada opção faz quando o indicador pousa nela por 1 s. O lápis alterna: liga se estiver desligado e desliga se estiver ligado. Opções sem ação ainda não respondem.
 const ACOES_RADIAIS = {
-  traco: () => { canetaAtiva = true; }      // libera o lápis
+  traco: () => {                            // liga ou desliga o lápis (e a borracha)
+    if (canetaAtiva) { desligarCaneta(); recado('Lápis desligado.', 1800); } else { canetaAtiva = true; recado('Lápis liberado.', 1800); }
+  }
 };
 
 function palmaAberta(m) {
@@ -1460,21 +1639,254 @@ function processarGestos(m, agora) {
     }
     return;
   }
-  if (!radial) {
+  if (processarPassador(m, agora)) { pausarTraco(m, agora, null, true); m.abrirDesde = 0; return; }
+  if (duas.desde) m.abrirDesde = 0;            // o sinal das duas mãos tem prioridade sobre o da palma aberta
+  else if (!radial) {
     if (palmaAberta(m)) {
       m.abertaVista = agora;
       if (!m.abrirDesde) m.abrirDesde = agora;
       if (agora - m.abrirDesde >= ESPERA_MENU) { pausarTraco(m, agora, null, true); abrirRadial(m); return; }
     } else if (m.abrirDesde && agora - m.abertaVista > TOLERANCIA_SINAL) m.abrirDesde = 0;
   }
+  if (processarPinca(m, agora)) return;
+  detectarClique(m, agora, d.slice(1));
   desenhar(m, agora, d);
 }
 
+// A pinça só vale com a base do mínimo (ponto 17) do lado certo da ponta do polegar (ponto 4), no eixo X da tela:
+// mão direita, x do 17 maior que x do 4; mão esquerda, menor. Sem saber o lado da mão, não bloqueia.
+// O rastreador às vezes troca direita por esquerda quando a mão vira de costas, e aí a regra se invertia junto.
+// Por isso o lado de cada mão é fixado pelos primeiros quadros em que ela aparece e vale enquanto ela estiver na tela;
+// e se o rastreador passar a dizer o lado oposto ao fixado, é sinal de mão de costas: a pinça fica bloqueada.
+function ladoDaMao(m) {
+  const lado = m.lm.lado;
+  if (!m.ladoFixo && lado) {
+    m.votosLado[lado] = (m.votosLado[lado] || 0) + 1;
+    if (m.votosLado[lado] >= 6) m.ladoFixo = lado;
+  }
+  return m.ladoFixo || lado;
+}
+// Costas pela profundidade: com a palma para a câmera, os dedos dobrados (médio, anelar e mínimo) ficam mais perto
+// da câmera que as bases deles; com as costas para a câmera, ficam mais longe. Não depende de saber se é a mão direita
+// ou a esquerda, que era onde a regra falhava. Nas suas fotos de palma de frente deu entre -0,03 e -0,06.
+const COSTAS_PROFUNDIDADE = 0.012;
+function profundidadeDosDedos(lm) {
+  if (!lm.z) return 0;
+  const med = a => a.reduce((s, k) => s + lm.z[k], 0) / a.length;
+  return med([10, 11, 12, 14, 15, 16, 18, 19, 20]) - med([9, 13, 17]);
+}
+function pincaNoLadoCerto(m) {
+  const lm = m.lm, lado = ladoDaMao(m);
+  if (profundidadeDosDedos(lm) > COSTAS_PROFUNDIDADE) return false;         // dedos dobrados mais longe que as bases: de costas
+  if (m.ladoFixo && lm.lado && lm.lado !== m.ladoFixo) return false;    // o rastreador "virou" a mão: de costas
+  if (m.palmaFrente === false && m.medidas.inclin != null && costasDeVerdade(m)) return false;   // mão aberta e chapada de costas
+  if (lado === 'Right') return lm[17][0] > lm[4][0];
+  if (lado === 'Left') return lm[17][0] < lm[4][0];
+  return true;
+}
+// "Totalmente de costas": a palma está de frente para a tela (não de lado), o que se vê pela largura da mão
+// (base do indicador até a base do mínimo) comparada ao tamanho da palma
+function costasDeVerdade(m) { return dist(m.lm[5], m.lm[17]) / m.medidas.palma > 0.55; }
+
+// Pinça (polegar e indicador juntos, indicador esticado): sobre a imagem, arrasta; sobre a bolinha azul do canto, muda o tamanho.
+// Abrir a pinça solta. Devolve true enquanto a pinça está fechada (aí a mão não desenha nem clica).
+function processarPinca(m, agora) {
+  const md = m.medidas;
+  if (!m.pinca && md.abertura < PINCA_FECHA && md.dobra > DOBRA_MAXIMA && pincaNoLadoCerto(m)) {
+    m.pinca = true;
+    const alvo = alvoEm(m.pontoPinca[0], m.pontoPinca[1]);
+    const outra = alvo && maos.find(o => o !== m && o.pinca && o.agarrada && o.agarrada.item === alvo.item);
+    if (outra) iniciarZoomDuplo(alvo.item, outra, m);           // a outra mão já segura esta imagem: as duas fazem zoom
+    else {
+      m.agarrada = alvo ? pegarImagem(alvo, m.pontoPinca) : null;
+      if (m.agarrada && itens.includes(m.agarrada.item)) { itens.splice(itens.indexOf(m.agarrada.item), 1); itens.push(m.agarrada.item); }   // traz para a frente
+    }
+    pausarTraco(m, agora, null, true);
+    pedirDesenho();
+  } else if (m.pinca && md.abertura > PINCA_ABRE) {
+    soltarPinca(m);
+    m.esperaAte = agora + 300; m.podeClicar = false;
+  }
+  if (!m.pinca) return false;
+  if (m.agarrada && m.agarrada.modo !== 'duplo') moverImagem(m.agarrada, m.pontoPinca);
+  return true;
+}
+
+// Solta o que a pinça segura. Solta em cima da lixeira: a imagem é apagada.
+function soltarPinca(m) {
+  const g = m.agarrada;
+  m.pinca = false; m.agarrada = null;
+  if (duplo && duplo.maos.includes(m)) {                       // a outra mão continua sozinha, arrastando
+    const o = duplo.maos.find(x => x !== m); duplo = null;
+    if (o.agarrada) o.agarrada = pegarImagem({ item: g.item, modo: 'mover' }, o.pontoPinca);
+  } else if (g && g.modo === 'mover' && g.item.tipo === 'imagem' && sobreLixeira(g.ultimo)) jogarNaLixeira(g.item);   // o slide não vai para a lixeira   // vale onde a pinça estava antes de abrir
+  pedirDesenho();
+}
+
+// ---------- zoom com as duas mãos ----------
+// As duas pinças na mesma imagem: afastar as mãos aumenta, aproximar diminui. O ponto da imagem que estava entre as duas
+// pinças continua entre elas (o zoom parte do centro das pinças). Mesma sensibilidade da bolinha.
+let duplo = null;                   // { item, maos, d0, w0, h0, fx, fy }
+function iniciarZoomDuplo(item, a, b) {
+  const pa = a.pontoPinca, pb = b.pontoPinca, c = meio(pa, pb);
+  duplo = { item, maos: [a, b], d0: Math.max(1, dist(pa, pb)), w0: item.w, h0: item.h, fx: (c[0] - item.x) / item.w, fy: (c[1] - item.y) / item.h };
+  a.agarrada = { item, modo: 'duplo' }; b.agarrada = { item, modo: 'duplo' };
+  if (itens.includes(item)) { itens.splice(itens.indexOf(item), 1); itens.push(item); }
+}
+function processarZoomDuplo() {
+  if (!duplo) return;
+  const [a, b] = duplo.maos;
+  if (!a.lm || !b.lm || !a.pinca || !b.pinca) {                 // uma das mãos sumiu ou soltou
+    const fica = [a, b].find(m => m.lm && m.pinca), item = duplo.item; duplo = null;
+    for (const m of [a, b]) if (m !== fica) m.agarrada = null;
+    if (fica) fica.agarrada = pegarImagem({ item, modo: 'mover' }, fica.pontoPinca);
+    return;
+  }
+  const c = meio(a.pontoPinca, b.pontoPinca), it = duplo.item;
+  const razao = dist(a.pontoPinca, b.pontoPinca) / duplo.d0;
+  const k = Math.max(80 * K / Math.max(duplo.w0, duplo.h0), 1 + (razao - 1) * SENSIBILIDADE_TAMANHO);
+  it.w = duplo.w0 * k; it.h = duplo.h0 * k;
+  it.x = c[0] - duplo.fx * it.w; it.y = c[1] - duplo.fy * it.h;
+  pedirDesenho();
+}
+
+// Clique: o indicador aponta (só ele erguido) e depois abaixa, fechando a mão. Vale onde ele apontava pouco antes de abaixar.
+function detectarClique(m, agora, outros) {
+  if (outros === '1000') {
+    m.historico.push({ t: agora, x: m.ponta[0], y: m.ponta[1] });
+    m.historico = m.historico.filter(p => agora - p.t < 600);
+    m.ultimoApontar = agora;
+    m.podeClicar = true;
+  }
+  if (outros === '0000' && m.podeClicar && agora - m.ultimoApontar < 300) {
+    const alvo = m.historico.find(p => p.t >= m.ultimoApontar - JANELA_CLIQUE);
+    if (alvo) clicar(alvo.x, alvo.y);
+    m.podeClicar = false;
+  }
+}
+
+// ---------- sinal das duas mãos ----------
+// As duas mãos na tela, com os pontos 17 (base do mínimo) próximos: até 300 de distância no eixo X e até 50 de
+// diferença de altura no eixo Y. Mantido por 1,5 s, completa o anel de espera.
+// As medidas são da lousa, em que o lado menor da tela vale sempre 720: numa tela 1280×720 são pixels de verdade,
+// e em telas menores (celular) encolhem na mesma proporção.
+const DUAS_MAOS_X = 300, DUAS_MAOS_Y = 50;
+const ESPERA_DUAS_MAOS = 1500;
+let duas = { desde: 0, vista: 0, centro: null, feito: false };
+
+function aoCompletarDuasMaos() { abrirCarrossel(); }
+
+function processarDuasMaos(agora) {
+  const vis = maos.filter(m => m.lm);
+  let ok = false;
+  if (vis.length === 2) {
+    const a = vis[0].lm[17], b = vis[1].lm[17];
+    ok = Math.abs(a[0] - b[0]) <= DUAS_MAOS_X && Math.abs(a[1] - b[1]) <= DUAS_MAOS_Y;
+    if (ok) duas.centro = meio(a, b);
+  }
+  if (ok) {
+    duas.vista = agora;
+    if (!duas.desde) duas.desde = agora;
+    if (!duas.feito && agora - duas.desde >= ESPERA_DUAS_MAOS) { duas.feito = true; aoCompletarDuasMaos(); }
+  } else if (duas.desde && agora - duas.vista > TOLERANCIA_SINAL) duas = { desde: 0, vista: 0, centro: null, feito: false };
+}
+
+// ---------- passador de slides ----------
+// Sinal: só o mindinho erguido (indicador, médio e anelar dobrados) e a mão inclinada, com o mindinho apontando
+// na diagonal para cima e para fora: entre 20° e 70° acima da horizontal (na sua foto, 45°). Vale para os dois lados,
+// porque com as costas da mão para a câmera o mindinho aponta para o lado oposto.
+// Palma de frente para a câmera: próximo slide. Costas da mão para a câmera: slide anterior.
+const PASSADOR_INCLINACAO_MIN = 20, PASSADOR_INCLINACAO_MAX = 70;
+const ESPERA_PASSADOR = 500;        // ms segurando o sinal para passar
+
+// Ângulo do mindinho (base 17 -> ponta 20) acima da horizontal, em graus, para qualquer lado: 0 = deitado, 90 = em pé
+const elevacaoDoMindinho = lm => Math.atan2(lm[17][1] - lm[20][1], Math.abs(lm[20][0] - lm[17][0])) * 180 / Math.PI;
+
+function sinalDoPassador(m) {
+  const lm = m.lm, d = m.dedos;
+  if (!(d[4] === 1 && d[1] === 0 && d[2] === 0 && d[3] === 0)) return false;            // só o mindinho erguido entre os quatro dedos
+  const inc = elevacaoDoMindinho(lm);
+  return inc >= PASSADOR_INCLINACAO_MIN && inc <= PASSADOR_INCLINACAO_MAX;
+}
+
+function processarPassador(m, agora) {
+  if (!sinalDoPassador(m) || m.palmaFrente == null) {
+    if (m.passadorDesde && agora - m.passadorVisto > TOLERANCIA_SINAL) { m.passadorDesde = 0; m.passadorFeito = false; }
+    return !!m.passadorDesde;
+  }
+  const sentido = m.palmaFrente ? 1 : -1;
+  if (m.passadorDesde && m.passadorSentido !== sentido) { m.passadorDesde = 0; m.passadorFeito = false; }   // virou a mão: recomeça
+  m.passadorVisto = agora; m.passadorSentido = sentido;
+  if (!m.passadorDesde) m.passadorDesde = agora;
+  if (!m.passadorFeito && agora - m.passadorDesde >= ESPERA_PASSADOR) {
+    m.passadorFeito = true;                     // passa um slide por sinal; para passar outro, desfaça e refaça o sinal
+    if (paginaAtual < 0) recado('Nenhum slide aberto. Envie um .pptx ou imagens pelo botão Enviar arquivo.', 3000);
+    else {
+      const antes = paginaAtual;
+      irParaPagina(paginaAtual + sentido);
+      if (paginaAtual === antes) recado(sentido > 0 ? 'Este é o último slide.' : 'Este é o primeiro slide.', 1800);
+    }
+  }
+  return true;
+}
+
 // ---------- lápis ----------
-// Com o lápis liberado, só o indicador erguido desenha. Falhas curtas de leitura não quebram o traço.
+// Com o lápis liberado, desenha quando: só o indicador está erguido (médio, anelar e mínimo dobrados)
+// e a ponta do polegar (ponto 4) passou da junta dele (ponto 3) no eixo X, para o lado do mínimo.
+// Na mão direita, como aparece na tela, isso é x do ponto 4 > x do ponto 3; na esquerda a página espelha a regra sozinha.
+// Falhas curtas de leitura não quebram o traço.
+function polegarTravado(m) {
+  const lm = m.lm, ladoMinimo = Math.sign(lm[17][0] - lm[5][0]) || 1;   // para que lado do eixo X fica o mínimo nesta mão
+  return (lm[4][0] - lm[3][0]) * ladoMinimo > 0;
+}
+const gestoDoLapis = (m, d) => d.slice(1) === '1000' && polegarTravado(m);
+// Borracha: indicador e médio erguidos e colados (anelar e mínimo dobrados), com a mesma regra do polegar (ponto 4 contra o 3)
+const BORRACHA_JUNTOS = 0.30;       // distância máxima entre as pontas do indicador e do médio, proporcional à palma
+const RAIO_BORRACHA = 28;
+const gestoDaBorracha = (m, d) => d.slice(1) === '1100' && m.medidas.afast < BORRACHA_JUNTOS && polegarTravado(m);
+
+function distSegmento(p, a, b) {
+  const vx = b[0] - a[0], vy = b[1] - a[1], c = vx * vx + vy * vy;
+  const t = c ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / c)) : 0;
+  return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy);
+}
+
+// Apaga a parte dos traços que a borracha toca, dividindo o traço em pedaços (formas não são apagadas)
+function apagar(c) {
+  const novo = [];
+  let mudouAlgo = false;
+  for (const it of itens) {
+    if (it.tipo !== 'traco') { novo.push(it); continue; }
+    let pedaco = [], mudou = false;
+    const pedacos = [];
+    const fechar = () => { if (pedaco.length) pedacos.push(pedaco); pedaco = []; };
+    for (const p of it.pontos) {
+      if (dist(p, c) < RAIO_BORRACHA + it.tam / 2) { fechar(); mudou = true; continue; }
+      if (pedaco.length && distSegmento(c, pedaco[pedaco.length - 1], p) < RAIO_BORRACHA) { fechar(); mudou = true; }
+      pedaco.push(p);
+    }
+    fechar();
+    if (!mudou) { novo.push(it); continue; }
+    mudouAlgo = true;
+    for (const m of maos) if (m.tracoAtual === it) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; }
+    for (const pts of pedacos) novo.push({ tipo: 'traco', cor: it.cor, tam: it.tam, pontos: pts });
+  }
+  if (mudouAlgo) { itens = novo; pedirDesenho(); }
+}
+
 function desenhar(m, agora, d) {
   const [x, y] = m.ponta;
-  if (canetaAtiva && agora >= m.esperaAte && !m.abrirDesde && d === '01000' && !noPainel(x, y)) {
+  m.borracha = null;
+  if (canetaAtiva && agora >= m.esperaAte && !m.abrirDesde && gestoDaBorracha(m, d)) {
+    pausarTraco(m, agora, null, true);
+    const pb = meio(m.lm[8], m.lm[12]);
+    m.borracha = [m.bx.passo(pb[0], agora), m.by.passo(pb[1], agora)];
+    if (!noPainel(m.borracha[0], m.borracha[1])) apagar(m.borracha);
+    pedirDesenho();
+    return;
+  }
+  m.bx.reiniciar(); m.by.reiniciar();
+  if (canetaAtiva && agora >= m.esperaAte && !m.abrirDesde && gestoDoLapis(m, d) && !noPainel(x, y)) {
     if (!m.tracoAtual) {
       if (!m.querDesde) m.querDesde = agora;
       if (agora - m.querDesde < 80) return;     // espera o gesto firmar, para não deixar um ponto solto ao passar por ele
@@ -1544,12 +1956,13 @@ function processarMao(m, agora) {
   // se inverte quando a mão vira; combinado com o lado da mão (direita/esquerda) diz qual face está virada para a câmera.
   const a = [lm[5][0] - lm[0][0], lm[5][1] - lm[0][1]], b = [lm[17][0] - lm[0][0], lm[17][1] - lm[0][1]];
   md.volta = Math.sign(a[0] * b[1] - a[1] * b[0]) || 1;
-  m.palmaFrente = lm.lado ? md.volta * (lm.lado === 'Right' ? 1 : -1) === SINAL_PALMA : null;   // null: sem o lado, não dá para saber
+  const ladoAgora = ladoDaMao(m);
+  m.palmaFrente = ladoAgora ? md.volta * (ladoAgora === 'Right' ? 1 : -1) === SINAL_PALMA : null;   // null: sem o lado, não dá para saber
   processarGestos(m, agora);
   if (leituraVisivel) m.leitura = '[' + m.dedos.join(',') + ']  pinça ' + md.abertura.toFixed(2) + '  dobra ' + md.dobra.toFixed(2)
             + '\n   ind-médio ' + md.afast.toFixed(2) + '  méd-anelar ' + md.afast2.toFixed(2) + '  palma ' + (m.palmaCima ? 'cima' : 'baixo') + ' (' + md.inclin.toFixed(2) + ')'
             + '\n   ' + (m.palmaFrente == null ? 'face ?' : m.palmaFrente ? 'palma de frente' : 'costas da mão') + ' (' + lm.lado + ' ' + md.volta + ')'
-            + '  dedos ' + md.inclinDedos.toFixed(0) + '°  juntos ' + md.juntos.toFixed(2) + '  polegar ' + md.polegar.toFixed(2) + (palmaAberta(m) ? '  → PALMA ABERTA' : '');
+            + '  dedos ' + md.inclinDedos.toFixed(0) + '°  juntos ' + md.juntos.toFixed(2) + '  polegar ' + md.polegar.toFixed(2) + '\n   ponto 4 x ' + Math.round(lm[4][0]) + ' / ponto 3 x ' + Math.round(lm[3][0]) + (polegarTravado(m) ? '  → lápis pode desenhar' : '  → lápis parado') + '\n   mindinho ' + elevacaoDoMindinho(lm).toFixed(0) + '° acima da horizontal' + (sinalDoPassador(m) ? '  → PASSADOR ' + (m.palmaFrente === false ? '(costas: voltar)' : '(frente: avançar)') : '') + '  ·  ponto 17 x ' + Math.round(lm[17][0]) + '  profundidade ' + profundidadeDosDedos(lm).toFixed(3) + (pincaNoLadoCerto(m) ? ' → pinça liberada' : ' → pinça bloqueada') + (palmaAberta(m) ? '  → PALMA ABERTA' : '');
 }
 
 // ---------- desenho da tela ----------
@@ -1589,6 +2002,13 @@ function desenharItens(lista) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   for (const it of lista) {
     if (it.tipo === 'traco') { desenharTraco(it); continue; }
+    if (it.tipo === 'imagem') {
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 10 * K;
+      ctx.drawImage(it.img, it.x, it.y, it.w, it.h); ctx.restore();
+      ctx.beginPath(); ctx.arc(it.x + it.w, it.y + it.h, RAIO_ALCA * K, 0, Math.PI * 2);    // bolinha do tamanho, no canto
+      ctx.fillStyle = '#1f5fe0'; ctx.fill(); ctx.lineWidth = 3 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      continue;
+    }
     ctx.save();
     const e = it.esc || 1;
     ctx.translate(it.x, it.y); ctx.rotate(it.rot || 0); ctx.scale(e, e);
@@ -1605,21 +2025,31 @@ function icone(id, x, y, l) {
   ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.fillStyle = '#111111'; ctx.strokeStyle = '#111111';
   if (id === 'cores') {                                       // paleta: disco escuro com furos e a cor atual
     ctx.beginPath(); ctx.ellipse(cx, cy, 17 * u, 15 * u, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#e4e6ec';
+    ctx.fillStyle = '#ffffff';
     for (const [dx, dy] of [[-8, -6], [0, -9], [8, -6], [-10, 3]]) { ctx.beginPath(); ctx.arc(cx + dx * u, cy + dy * u, 3 * u, 0, Math.PI * 2); ctx.fill(); }
     ctx.fillStyle = cor; ctx.beginPath(); ctx.arc(cx + 6 * u, cy + 6 * u, 5 * u, 0, Math.PI * 2); ctx.fill();
-    ctx.lineWidth = 1.5 * u; ctx.strokeStyle = '#e4e6ec'; ctx.stroke();
+    ctx.lineWidth = 1.5 * u; ctx.strokeStyle = '#ffffff'; ctx.stroke();
   } else if (id === 'traco') {                                // lápis inclinado; com a caneta ligada, a ponta sai na cor atual
     ctx.translate(cx, cy); ctx.rotate(-Math.PI / 4);
     ctx.fillRect(-12 * u, -4.5 * u, 22 * u, 9 * u);
     ctx.beginPath(); ctx.moveTo(11 * u, -4.5 * u); ctx.lineTo(18 * u, 0); ctx.lineTo(11 * u, 4.5 * u); ctx.closePath();
     ctx.fillStyle = canetaAtiva ? cor : '#111111'; ctx.fill();
-    ctx.fillStyle = '#e4e6ec'; ctx.fillRect(4 * u, -4.5 * u, 2 * u, 9 * u);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(4 * u, -4.5 * u, 2 * u, 9 * u);
   } else if (id === 'formas') {                               // triângulo vazado
     ctx.lineWidth = 2.6 * u; ctx.beginPath(); ctx.moveTo(cx, cy - 14 * u); ctx.lineTo(cx + 16 * u, cy + 13 * u); ctx.lineTo(cx - 16 * u, cy + 13 * u); ctx.closePath(); ctx.stroke();
   } else if (id === 'lousa') {                                // duas folhas empilhadas
     retArred(cx - 12 * u, cy - 12 * u, 26 * u, 19 * u, 3 * u); ctx.lineWidth = 2.6 * u; ctx.stroke();
     retArred(cx - 16 * u, cy - 6 * u, 28 * u, 20 * u, 3 * u); ctx.fill();
+  } else if (id === 'imagens') {                              // moldura com montanha e sol
+    retArred(cx - 16 * u, cy - 12 * u, 32 * u, 24 * u, 3 * u); ctx.lineWidth = 2.6 * u; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 13 * u, cy + 9 * u); ctx.lineTo(cx - 4 * u, cy - 2 * u); ctx.lineTo(cx + 2 * u, cy + 4 * u); ctx.lineTo(cx + 6 * u, cy + 1 * u); ctx.lineTo(cx + 13 * u, cy + 9 * u); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 7 * u, cy - 5 * u, 3 * u, 0, Math.PI * 2); ctx.fill();
+  } else if (id === 'lixeira') {                              // lixeira: tampa com alça e corpo com frisos
+    ctx.fillRect(cx - 14 * u, cy - 11 * u, 28 * u, 3.5 * u);                     // tampa
+    ctx.lineWidth = 2.6 * u; ctx.strokeRect(cx - 5 * u, cy - 15 * u, 10 * u, 4 * u);   // alça
+    ctx.beginPath(); ctx.moveTo(cx - 11 * u, cy - 5 * u); ctx.lineTo(cx + 11 * u, cy - 5 * u); ctx.lineTo(cx + 9 * u, cy + 15 * u); ctx.lineTo(cx - 9 * u, cy + 15 * u); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * u;
+    for (const dx of [-4.5, 0, 4.5]) { ctx.beginPath(); ctx.moveTo(cx + dx * u, cy - 1 * u); ctx.lineTo(cx + dx * 0.85 * u, cy + 11 * u); ctx.stroke(); }
   } else if (id === 'recolher' || id === 'expandir') {        // seta < ou >
     const s = id === 'recolher' ? 1 : -1;
     ctx.lineWidth = 3.2 * u; ctx.beginPath(); ctx.moveTo(cx + 5 * u * s, cy - 11 * u); ctx.lineTo(cx - 5 * u * s, cy); ctx.lineTo(cx + 5 * u * s, cy + 11 * u); ctx.stroke();
@@ -1637,7 +2067,7 @@ function desenharBotao(b, agora, sobre) {
   ctx.fillStyle = '#111111'; ctx.font = '600 ' + Math.round(13 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   if (b.tipo === 'tam') { ctx.beginPath(); ctx.arc(cx, cy, b.valor / 2 + 1, 0, Math.PI * 2); ctx.fill(); }
   else if (b.tipo === 'forma') { caminhoForma(b.valor, cx, cy, 0.17 * K); ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke(); }
-  else if (b.tipo !== 'cor') ctx.fillText({ limpar: 'Limpar', camera: 'Câmera', caneta: 'Caneta e borracha: ' + (canetaAtiva ? 'ligadas' : 'desligadas'), ant: '◀  Slide anterior', prox: 'Próximo slide  ▶' }[b.tipo], cx, cy);
+  else if (b.tipo !== 'cor') ctx.fillText({ limpar: 'Limpar', camera: 'Câmera', caneta: 'Caneta e borracha: ' + (canetaAtiva ? 'ligadas' : 'desligadas'), ant: '◀  Slide anterior', prox: 'Próximo slide  ▶', importar: 'Importar imagens', zoomOriginal: 'Slide no tamanho original', galeria: 'Abrir carrossel (' + galeria.length + (galeria.length === 1 ? ' imagem)' : ' imagens)') }[b.tipo], cx, cy);
   retArred(b.x, b.y, b.w, b.h, 8 * K);
   if (selecionado) { ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 4; }
   else if (sobre.has(idDe(b))) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 3; }
@@ -1647,19 +2077,49 @@ function desenharBotao(b, agora, sobre) {
 }
 
 function desenharInterface(agora, sobre) {
+  // Fundo do botão de ícone: quadrado branco com cantos arredondados e uma sombra leve, para destacar sobre a câmera
+  const fundoDoIcone = (x, y, w, h, borda) => {
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 6 * K; ctx.shadowOffsetY = 1.5 * K;
+    retArred(x, y, w, h, 9 * K); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.restore();
+    if (borda) { retArred(x, y, w, h, 9 * K); ctx.strokeStyle = borda; ctx.lineWidth = 2.5 * K; ctx.stroke(); }
+  };
   for (const r of montarInterface()) {
-    if (r.tipo === 'barra') {
-      ctx.fillStyle = '#dfe1e6'; ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = '#c4c8d2'; ctx.fillRect(r.x + r.w - 1.5, r.y, 1.5, r.h);
-    } else if (r.tipo === 'expandir') {                       // aba que sobra com o menu recolhido
-      retArred(r.x - 10 * K, r.y, r.w + 10 * K, r.h, 10 * K); ctx.fillStyle = '#dfe1e6'; ctx.fill(); ctx.strokeStyle = sobre.has(idDe(r)) ? '#111111' : '#c4c8d2'; ctx.lineWidth = 2; ctx.stroke();
-      icone('expandir', r.x + (r.w - 26 * K) / 2, r.y + (r.h - 26 * K) / 2, 26 * K);
+    if (r.tipo === 'barra') continue;                       // a barra é transparente: só os ícones aparecem
+    if (r.tipo === 'carrossel') {
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 12 * K;
+      retArred(r.x, r.y, r.w, r.h, 14 * K); ctx.fillStyle = 'rgba(15,18,26,0.6)'; ctx.fill(); ctx.restore();
+      ctx.fillStyle = '#ffffff'; ctx.font = '600 ' + Math.round(13 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('Imagens' + (r.paginas > 1 ? '  ·  ' + (carrossel.pagina + 1) + ' de ' + r.paginas : '') + '  ·  aponte e clique para abrir', r.x + 16 * K, r.y + 26 * K);
+      continue;
+    }
+    if (r.tipo === 'miniatura') {
+      const g = galeria[r.valor], sob = sobre.has(idDe(r));
+      retArred(r.x, r.y, r.w, r.h, 8 * K); ctx.fillStyle = '#ffffff'; ctx.fill();
+      const e = Math.min((r.w - 8 * K) / g.largura, (r.h - 8 * K) / g.altura), l = g.largura * e, a = g.altura * e;
+      ctx.drawImage(g.imagem, r.x + (r.w - l) / 2, r.y + (r.h - a) / 2, l, a);
+      retArred(r.x, r.y, r.w, r.h, 8 * K); ctx.strokeStyle = sob ? '#1f5fe0' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = sob ? 4 * K : 2; ctx.stroke();
+      continue;
+    }
+    if (r.tipo === 'carrosselFechar' || r.tipo === 'carrosselAnt' || r.tipo === 'carrosselProx') {
+      fundoDoIcone(r.x, r.y, r.w, r.h, sobre.has(idDe(r)) ? '#111111' : null);
+      ctx.fillStyle = '#111111'; ctx.font = '700 ' + Math.round(r.w * 0.55) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(r.tipo === 'carrosselFechar' ? '×' : r.tipo === 'carrosselAnt' ? '‹' : '›', r.x + r.w / 2, r.y + r.h / 2 + 1);
+      continue;
+    }
+    if (r.tipo === 'expandir') {                            // aba que sobra com o menu recolhido
+      fundoDoIcone(r.x + 4 * K, r.y, r.w, r.h, sobre.has(idDe(r)) ? '#111111' : null);
+      icone('expandir', r.x + 4 * K + (r.w - 26 * K) / 2, r.y + (r.h - 26 * K) / 2, 26 * K);
+    } else if (r.tipo === 'lixeira') {
+      const piscando = (piscaPor.get(idDe(r)) || 0) > agora;
+      const alvoDoArraste = arrastandoSobreLixeira();
+      if (alvoDoArraste) { ctx.save(); ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.scale(1.2, 1.2); ctx.translate(-r.x - r.w / 2, -r.y - r.h / 2); }
+      fundoDoIcone(r.x, r.y, r.w, r.h, alvoDoArraste ? '#e5202b' : piscando ? '#1f5fe0' : sobre.has(idDe(r)) ? '#111111' : null);
+      icone('lixeira', r.x, r.y, r.w);
+      if (alvoDoArraste) ctx.restore();
     } else if (r.tipo === 'menu' || r.tipo === 'recolher') {
       const aberto = r.tipo === 'menu' && painelAberto === r.valor;
-      if (aberto || sobre.has(idDe(r)) || (piscaPor.get(idDe(r)) || 0) > agora) {
-        retArred(r.x, r.y, r.w, r.h, 9 * K); ctx.fillStyle = aberto ? '#c9d3ff' : '#ffffff'; ctx.fill();
-        if (sobre.has(idDe(r))) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.stroke(); }
-      }
+      const piscando = (piscaPor.get(idDe(r)) || 0) > agora;
+      fundoDoIcone(r.x, r.y, r.w, r.h, aberto || piscando ? '#1f5fe0' : sobre.has(idDe(r)) ? '#111111' : null);
       icone(r.tipo === 'menu' ? r.valor : 'recolher', r.x, r.y, r.w);
     } else if (r.tipo === 'painel') {
       retArred(r.x, r.y, r.w, r.h, 12 * K); ctx.fillStyle = '#e4e6ec'; ctx.fill(); ctx.strokeStyle = '#c4c8d2'; ctx.lineWidth = 2; ctx.stroke();
@@ -1707,6 +2167,8 @@ function iconeContorno(id, cx, cy, l) {
 }
 
 function desenharMenuDaMao(agora) {
+  if (duas.desde && duas.centro) anelDeEspera(duas.centro, 18 * K, (agora - duas.desde) / ESPERA_DUAS_MAOS);   // sinal das duas mãos
+  for (const m of maos) if (m.lm && m.passadorDesde && !m.passadorFeito) anelDeEspera(m.medidas.centro, 16 * K, (agora - m.passadorDesde) / ESPERA_PASSADOR);
   for (const m of maos) if (m.lm && m.abrirDesde && !radial) anelDeEspera(m.medidas.centro, 16 * K, (agora - m.abrirDesde) / ESPERA_MENU);
   if (!radial) return;
   for (const o of opcoesRadiais()) {
@@ -1716,6 +2178,7 @@ function desenharMenuDaMao(agora) {
     ctx.beginPath(); ctx.moveTo(d1, -m1); ctx.lineTo(d2, -m2); ctx.lineTo(d2, m2); ctx.lineTo(d1, m1); ctx.closePath();
     const mirando = radial.mira && radial.mira.id === o.id;
     ctx.fillStyle = mirando ? 'rgba(31,95,224,0.5)' : 'rgba(15,18,26,0.5)'; ctx.fill();
+    if (o.id === 'traco' && canetaAtiva) { ctx.lineWidth = 2.5 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke(); }   // lápis ligado: trapézio contornado
     ctx.restore();
     iconeContorno(o.id, o.x, o.y, o.r * 1.1);
     if (mirando) anelDeEspera([o.x, o.y], o.r * 0.85, (agora - radial.mira.desde) / ESPERA_OPCAO);
@@ -1730,7 +2193,23 @@ function desenharMao(m) {
   if (!lm || !m.ponta) return;
   for (const p of lm) { ctx.beginPath(); ctx.arc(p[0], p[1], 2.5 * K, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill(); }
   anel(m.ponta[0], m.ponta[1], 8 * K);
-  if (canetaAtiva && m.dedos && m.dedos.join('') === '01000' && !noPainel(m.ponta[0], m.ponta[1])) bolinha(m.ponta, Math.max(tam / 2, 3), cor);   // vai desenhar
+  // ponto 17 (base do mínimo), referência da pinça: verde com a pinça liberada, vermelho com ela bloqueada
+  const p17 = lm[17], liberada = m.medidas && pincaNoLadoCerto(m);
+  ctx.beginPath(); ctx.arc(p17[0], p17[1], 6 * K, 0, Math.PI * 2); ctx.fillStyle = liberada ? '#1a9d4b' : '#e5202b'; ctx.fill();
+  ctx.lineWidth = 2 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  ctx.font = '700 ' + Math.round(11 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3 * K; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeText('17', p17[0] + 9 * K, p17[1]); ctx.fillStyle = '#ffffff'; ctx.fillText('17', p17[0] + 9 * K, p17[1]);
+  if (m.pinca) {                                // pinça: anel no ponto entre polegar e indicador, azul se segura uma imagem
+    anel(m.pontoPinca[0], m.pontoPinca[1], 12 * K);
+    bolinha(m.pontoPinca, 7 * K, m.agarrada ? '#1f5fe0' : 'rgba(255,255,255,0.8)');
+    return;
+  }
+  if (canetaAtiva && m.dedos && gestoDoLapis(m, m.dedos.join('')) && !noPainel(m.ponta[0], m.ponta[1])) bolinha(m.ponta, Math.max(tam / 2, 3), cor);   // vai desenhar
+  if (m.borracha) {                             // círculo da borracha
+    ctx.beginPath(); ctx.arc(m.borracha[0], m.borracha[1], RAIO_BORRACHA, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fill();
+    ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.stroke(); ctx.setLineDash([]);
+  }
 }
 
 // ---------- redesenho econômico ----------
@@ -1745,7 +2224,11 @@ function pedirDesenho() { sujo = true; }
 const telaItens = document.createElement('canvas'), telaPainel = document.createElement('canvas');
 let chaveItens = null, chavePainel = null, temItensParados = false;
 
-function itensAtivos() { const s = new Set(maos.map(m => m.tracoAtual).filter(Boolean)); return s.size ? itens.filter(i => s.has(i)) : []; }   // traços em andamento
+function itensAtivos() {           // o que está mudando agora: traços em andamento e imagens presas
+  const s = new Set(maos.flatMap(m => [m.tracoAtual, m.agarrada && m.agarrada.item]).filter(Boolean));
+  if (arrastePonteiro) s.add(arrastePonteiro.item);
+  return s.size ? itens.filter(i => s.has(i)) : [];
+}
 
 function guardarItensParados(ativos) {
   // a imagem guardada vale enquanto a lista de itens e o conjunto de itens ativos forem os mesmos
@@ -1766,7 +2249,7 @@ function guardarItensParados(ativos) {
 function guardarPainel(agora, sobre) {
   const e = tela.width / W, partes = montarInterface();
   const piscando = Array.from(piscaPor).filter(([, t]) => t > agora).map(([id]) => id).join(',');
-  const chave = [menuAberto, painelAberto, cor, tam, cameraVisivel, canetaAtiva, paginaAtual, paginas.length, W, H, e, Array.from(sobre).join(','), piscando].join('|');
+  const chave = [arrastandoSobreLixeira(), tela.clientWidth, carrossel ? carrossel.pagina : -1, galeria.length, menuAberto, painelAberto, cor, tam, cameraVisivel, canetaAtiva, paginaAtual, paginas.length, W, H, e, Array.from(sobre).join(','), piscando].join('|');
   if (chave !== chavePainel) {
     chavePainel = chave;
     const direita = Math.max(...partes.map(r => r.x + r.w)) + 4;
@@ -1801,11 +2284,19 @@ function quadro() {
     const deteccoes = (res.landmarks || []).map((mao, i) => {
       const lm = mao.map(p => [q.ox + (1 - p.x) * q.dw, q.oy + p.y * q.dh]);
       lm.lado = lados[i] && lados[i][0] ? lados[i][0].categoryName : null;      // 'Left' ou 'Right', como o rastreador classifica
+      lm.z = mao.map(p => p.z);                 // profundidade de cada ponto: menor = mais perto da câmera
       return lm;
     });
     atribuirMaos(deteccoes, agora);
+    processarDuasMaos(agora);
+    processarZoomDuplo();
     if (leituraVisivel) {
-      const linhas = maos.filter(m => m.lm).sort((a, b) => a.punho[0] - b.punho[0]).map((m, i) => 'mão ' + (i + 1) + ': ' + m.leitura);
+      const vis = maos.filter(m => m.lm).sort((a, b) => a.punho[0] - b.punho[0]);
+      const linhas = vis.map((m, i) => 'mão ' + (i + 1) + ': ' + m.leitura);
+      if (vis.length === 2) {
+        const a = vis[0].lm[17], b = vis[1].lm[17];
+        linhas.push('pontos 17: distância X ' + Math.round(Math.abs(a[0] - b[0])) + ' (até ' + DUAS_MAOS_X + ')  ·  altura Y ' + Math.round(Math.abs(a[1] - b[1])) + ' (até ' + DUAS_MAOS_Y + ')' + (duas.desde ? '  → contando' : ''));
+      }
       el('leitura').textContent = linhas.length ? linhas.join('\n') : 'sem mão';
     }
   }
@@ -1816,7 +2307,10 @@ function quadro() {
 
   const ativos = itensAtivos();
   guardarItensParados(ativos);
-  const sobre = new Set();
+  const sobre = new Set();                      // botões sob um indicador apontando: ganham contorno
+  for (const m of maos) if (m.lm && m.dedos && m.ponta && m.dedos.slice(1).join('') === '1000') {
+    const b = botaoEm(m.ponta[0], m.ponta[1]); if (b && b.tipo !== 'barra' && b.tipo !== 'painel') sobre.add(idDe(b));
+  }
   const [px, py] = guardarPainel(agora, sobre);
 
   ctx = ctxTela;
@@ -1831,16 +2325,48 @@ function quadro() {
   ctx.drawImage(telaPainel, px, py);
   ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
   desenharMenuDaMao(agora);
+  const v = vistaAtual();
+  if (v) {                                      // bolinha azul do canto do slide
+    aplicarVistaSlide();
+    const c = cantoDoSlide(v);
+    ctx.beginPath(); ctx.arc(c[0], c[1], RAIO_ALCA * K, 0, Math.PI * 2);
+    ctx.fillStyle = '#1f5fe0'; ctx.fill(); ctx.lineWidth = 3 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  }
   for (const m of maos) desenharMao(m);
-  if (radial || maos.some(m => m.abrirDesde)) sujo = true;           // contagem ou menu na tela: continua redesenhando
+  if (radial || duas.desde || maos.some(m => m.abrirDesde || (m.passadorDesde && !m.passadorFeito))) sujo = true;           // contagem ou menu na tela: continua redesenhando
 }
 
 // ---------- mouse, toque e teclado ----------
-tela.addEventListener('pointerdown', e => {      // o mouse e o toque também clicam nos botões
+const pontoDoPonteiro = e => { const r = tela.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+tela.addEventListener('pointerdown', e => {      // o mouse e o toque clicam nos botões, e arrastam ou redimensionam a imagem
   e.preventDefault();
-  const r = tela.getBoundingClientRect();
-  clicar((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
+  const p = pontoDoPonteiro(e);
+  const alvo = botaoEm(p[0], p[1]) ? null : alvoEm(p[0], p[1]);
+  if (alvo) {
+    arrastePonteiro = pegarImagem(alvo, p);
+    if (itens.includes(alvo.item)) { itens.splice(itens.indexOf(alvo.item), 1); itens.push(alvo.item); }
+    tela.setPointerCapture(e.pointerId); pedirDesenho();
+    return;
+  }
+  cliqueDoPonteiro = true;
+  try { clicar(p[0], p[1]); } finally { cliqueDoPonteiro = false; }
 });
+tela.addEventListener('pointermove', e => { if (arrastePonteiro) moverImagem(arrastePonteiro, pontoDoPonteiro(e)); });
+tela.addEventListener('wheel', e => {          // rodinha do mouse: zoom no slide, a partir do cursor
+  const v = vistaAtual(); if (!v) return;
+  e.preventDefault();
+  const p = pontoDoPonteiro(e), k = Math.exp(-e.deltaY * 0.0015 * SENSIBILIDADE_TAMANHO / 0.46);
+  const nw = Math.max(80 * K, v.w * k), f = nw / v.w;
+  v.x = p[0] - (p[0] - v.x) * f; v.y = p[1] - (p[1] - v.y) * f; v.w = nw; v.h *= f;
+  pedirDesenho();
+}, { passive: false });
+const soltarPonteiro = () => {
+  if (!arrastePonteiro) return;
+  if (arrastePonteiro.modo === 'mover' && arrastePonteiro.item.tipo === 'imagem' && sobreLixeira(arrastePonteiro.ultimo)) jogarNaLixeira(arrastePonteiro.item);
+  arrastePonteiro = null; pedirDesenho();
+};
+tela.addEventListener('pointerup', soltarPonteiro);
+tela.addEventListener('pointercancel', soltarPonteiro);
 function telaCheia() {
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen().catch(() => {});
