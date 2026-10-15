@@ -63,19 +63,11 @@
 
 <div id="ajuda" hidden>
   <ul>
-    <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O que você desenha fica guardado na página em que foi feito.</li>
-    <li><b>Duas mãos:</b> todos os gestos valem para as duas, ao mesmo tempo. No celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
-    <li><b>Caneta e borracha:</b> começam desligadas. Ligue e desligue no botão do painel; desligadas, os gestos de desenhar, apagar e limpar tudo não fazem nada.</li>
-    <li><b>Sempre ativos:</b> clicar, mover forma (pinça), mudar o tamanho e girar.</li>
-    <li><b>Desenhar:</b> só o indicador erguido, sobre a lousa.</li>
-    <li><b>Clicar:</b> aponte para um botão e abaixe o indicador, fechando a mão.</li>
-    <li><b>Borracha:</b> indicador + médio erguidos e colados; passe sobre o traço.</li>
-    <li><b>Girar forma:</b> indicador + médio afastados em V, em cima da forma; gire a mão e a forma gira junto.</li>
-    <li><b>Mover forma:</b> palma para baixo, feche a pinça em cima da forma, arraste e abra para soltar.</li>
-    <li><b>Mudar o tamanho:</b> palma para cima, polegar e indicador em cima da forma (os outros dedos fechados). Afastar aumenta, aproximar diminui; abra a mão para travar.</li>
-    <li><b>Levantar a caneta:</b> polegar + indicador abertos.</li>
-    <li><b>Limpar tudo:</b> botão Limpar, ou indicador + médio + anelar erguidos e colados, com polegar e mindinho dobrados, parados por um instante.</li>
-    <li><b>Trava:</b> com o mindinho para fora, a mão solta o que estiver fazendo e não faz nenhum gesto.</li>
+    <li><b>Palma aberta:</b> palma virada para a câmera, dedos para cima e juntos, polegar junto à mão, parada por 1,5 s: abre o menu no centro da palma. Tirar a mão do lugar fecha o menu.</li>
+    <li><b>Lápis:</b> no menu, aponte só o indicador e pouse-o 1 s sobre o lápis: o lápis fica liberado e o menu fecha. Com ele liberado, só o indicador erguido desenha.</li>
+    <li><b>Menu:</b> a barra da esquerda, com mouse ou toque. Paleta = cores, lápis = caneta e espessura, triângulo = formas, folhas = lousa e slides. A seta de baixo recolhe a barra.</li>
+    <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx ou imagens. Troque de página com ◀ ▶ ou as setas do teclado.</li>
+    <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
   <div class="readout">
@@ -903,26 +895,14 @@ let W = 1280, H = 720;
 const MOVEL = window.matchMedia('(pointer: coarse)').matches;      // celular ou tablet
 const BW = 58, BH = 43, VAO = 8;    // tamanho dos botões e vão entre eles, nas medidas internas do painel
 // x, y: canto do painel na lousa, afastado das bordas, onde a câmera perde a mão. k: ampliação do painel (maior no celular).
-const PAINEL = { x: 110, y: 70, w: 20 + 4 * BW + 3 * VAO, h: 347, k: 1 };
-const noPainel = (x, y) => x > PAINEL.x - 12 && x < PAINEL.x + PAINEL.w * PAINEL.k + 12 && y > PAINEL.y - 12 && y < PAINEL.y + PAINEL.h * PAINEL.k + 12;
+const K = MOVEL ? 1.3 : 1;          // ampliação do menu e dos painéis: maiores no celular, para o dedo acertar
+// Sobre o menu ou um painel aberto não se desenha (com 12 de folga em volta)
+const noPainel = (x, y) => montarInterface().some(r => x > r.x - 12 && x < r.x + r.w + 12 && y > r.y - 12 && y < r.y + r.h + 12);
 
-// Limiares dos gestos. As distâncias são divididas pelo tamanho da palma, então não mudam com a distância até a câmera.
-const JANELA_CLIQUE = 250;          // ms: o clique vale onde o dedo apontava pouco antes de abaixar
-const TOLERANCIA_TRACO = 150;       // ms: falhas de leitura mais curtas que isso não quebram o traço
-const RAIO_BORRACHA = 28;
-const DEDOS_JUNTOS = 0.25, DEDOS_ABERTOS = 0.40;   // pontas do indicador e do médio: juntos = borracha, abertos = girar
-const LIMPAR_JUNTOS = 0.30;          // indicador-médio e médio-anelar abaixo disso contam como colados
-const FIRMEZA_LIMPAR = 300;         // ms com o gesto de limpar parado antes de apagar tudo
-const FIRMEZA_TRAVA = 80;           // ms com o mindinho para fora antes de a trava valer (ignora leituras soltas)
-const POLEGAR_ABERTO = 0.6;         // polegar afastado da base do indicador
-const DOBRA_MAXIMA = 0.6;           // abaixo disso o indicador está dobrado demais para ser pinça (é mão fechada)
-const PINCA_FECHA = 0.28, PINCA_ABRE = 0.45;       // distância polegar-indicador
-const PALMA_CIMA = 0.15, PALMA_BAIXO = 0.05;       // quanto o polegar está acima do indicador (ver palmaParaCima)
-const ESPERA_APOS_SOLTAR = 300;     // ms sem desenhar nem clicar depois de soltar uma forma
-const FIRMEZA_TAMANHO = 200;        // ms com o gesto parado sobre a forma antes de o tamanho começar a seguir
-const PISO_ABERTURA = 0.30;         // aberturas menores que isso contam como pinça fechada no cálculo do tamanho
-const COMECOU_ABERTO = 0.6;         // se o gesto de tamanho começou acima disso, fechar a pinça trava o tamanho
-const ESCALA_MIN = 0.25, ESCALA_MAX = 4;
+// Medidas da mão. As distâncias são divididas pelo tamanho da palma, então não mudam com a distância até a câmera.
+// Nenhum gesto está configurado: a página só acompanha as mãos e expõe as medidas abaixo (ver processarMao).
+const POLEGAR_ABERTO = 0.6;         // polegar afastado da base do indicador conta como aberto
+const PALMA_CIMA = 0.15, PALMA_BAIXO = 0.05;       // quanto o polegar está acima do indicador (ver inclinacaoPalma)
 
 const video = document.getElementById('video');
 const tela = document.getElementById('tela');
@@ -946,27 +926,60 @@ let novasFormas = 0;
 let maos = [];                      // uma entrada por mão acompanhada (até duas)
 
 // ---------- botões do painel ----------
-const botoes = [];
-// As posições dos botões são relativas ao canto do painel; quem converte para a lousa é botaoEm e desenharPainel
-const col = i => 10 + (i % 4) * (BW + VAO), lin = (y0, i) => y0 + Math.floor(i / 4) * (BH + VAO);
-const ROTULOS = [['Cor', 24], ['Traço', 146], ['Formas', 217], ['Lousa', 288]];     // texto e altura dentro do painel
-CORES.forEach((c, i) => botoes.push({ tipo: 'cor', valor: c, x: col(i), y: lin(30, i), w: BW, h: BH }));
-TAMANHOS.forEach((t, i) => botoes.push({ tipo: 'tam', valor: t, x: col(i), y: lin(152, i), w: BW, h: BH }));
-FORMAS.forEach((f, i) => botoes.push({ tipo: 'forma', valor: f, x: col(i), y: lin(223, i), w: BW, h: BH }));
-botoes.push({ tipo: 'limpar', x: col(0), y: lin(294, 0), w: BW, h: BH });
-botoes.push({ tipo: 'camera', x: col(1), y: lin(294, 0), w: BW, h: BH });
-botoes.push({ tipo: 'caneta', x: col(2), y: lin(294, 0), w: BW * 2 + VAO, h: BH });     // liga e desliga caneta e borracha, as duas juntas
+// ---------- menu lateral retrátil ----------
+// Uma barra na borda esquerda com quatro ícones; cada um abre, ao lado, um painel com as opções. A seta de baixo recolhe a barra.
+const MENU = [
+  { id: 'cores', titulo: 'Cores' },
+  { id: 'traco', titulo: 'Caneta e traço' },
+  { id: 'formas', titulo: 'Formas' },
+  { id: 'lousa', titulo: 'Lousa' }
+];
+let menuAberto = true;
+let painelAberto = null;            // id do item do menu cujo painel está aberto, ou null
 
-function botaoEm(x, y) {
-  x = (x - PAINEL.x) / PAINEL.k; y = (y - PAINEL.y) / PAINEL.k;      // da lousa para as medidas internas do painel
-  return botoes.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
+// Conteúdo de cada painel: botões numa grade (col, lin, quantas colunas ocupa)
+function conteudoDoPainel(id) {
+  if (id === 'cores') return { colunas: 3, botoes: CORES.map((c, i) => ({ tipo: 'cor', valor: c, col: i % 3, lin: Math.floor(i / 3), vao: 1 })) };
+  if (id === 'traco') return { colunas: 4, botoes: [{ tipo: 'caneta', col: 0, lin: 0, vao: 4 }].concat(TAMANHOS.map((t, i) => ({ tipo: 'tam', valor: t, col: i, lin: 1, vao: 1 }))) };
+  if (id === 'formas') return { colunas: 4, botoes: FORMAS.map((f, i) => ({ tipo: 'forma', valor: f, col: i, lin: 0, vao: 1 })) };
+  const b = [{ tipo: 'limpar', col: 0, lin: 0, vao: 2 }, { tipo: 'camera', col: 2, lin: 0, vao: 2 }];
+  if (paginaAtual >= 0) b.push({ tipo: 'ant', col: 0, lin: 1, vao: 2 }, { tipo: 'prox', col: 2, lin: 1, vao: 2 });   // trocar de slide com o gesto
+  return { colunas: 4, botoes: b };
+}
+
+// Tudo o que o menu ocupa na lousa, em coordenadas lógicas. Os itens com `tipo` de botão respondem ao clique.
+function montarInterface() {
+  const r = [], B = 56 * K, lado = 44 * K;
+  if (!menuAberto) { r.push({ tipo: 'expandir', x: 0, y: H - 80 * K, w: 30 * K, h: 60 * K }); return r; }
+  r.push({ tipo: 'barra', x: 0, y: 0, w: B, h: H });
+  MENU.forEach((m, i) => r.push({ tipo: 'menu', valor: m.id, x: (B - lado) / 2, y: 56 * K + i * 54 * K, w: lado, h: lado }));
+  r.push({ tipo: 'recolher', x: (B - lado) / 2, y: H - lado - 16 * K, w: lado, h: lado });
+  if (painelAberto) {
+    const item = r.find(e => e.tipo === 'menu' && e.valor === painelAberto);
+    montarPainel(r, painelAberto, (w, h) => [B + 10 * K, Math.max(8 * K, Math.min(H - h - 8 * K, item.y - 10 * K))]);   // ao lado do ícone
+  }
+  return r;
+}
+
+function montarPainel(r, id, posicao) {
+  const c = conteudoDoPainel(id), bw = BW * K, bh = BH * K, vao = VAO * K, pad = 10 * K, titulo = 24 * K;
+  const linhas = Math.max(...c.botoes.map(b => b.lin)) + 1;
+  const w = pad * 2 + c.colunas * bw + (c.colunas - 1) * vao, h = pad * 2 + titulo + linhas * bh + (linhas - 1) * vao;
+  const [x, y] = posicao(w, h);
+  r.push({ tipo: 'painel', x, y, w, h, titulo: MENU.find(m => m.id === id).titulo });
+  for (const b of c.botoes) r.push({ tipo: b.tipo, valor: b.valor, x: x + pad + b.col * (bw + vao), y: y + pad + titulo + b.lin * (bh + vao), w: b.vao * bw + (b.vao - 1) * vao, h: bh });
+}
+const idDe = b => b.tipo + ':' + (b.valor == null ? '' : b.valor);
+const piscaPor = new Map();         // botão -> até quando fica realçado depois do clique
+
+function botaoEm(x, y) {            // o elemento clicável sob o ponto; o fundo da barra e do painel também contam, para o clique não "cair fora"
+  const r = montarInterface();
+  for (let i = r.length - 1; i >= 0; i--) { const b = r[i]; if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b; }
+  return null;
 }
 
 // Troca o conjunto de desenhos em uso; as mãos largam o que seguravam do conjunto anterior
-function trocarItens(novos) {
-  itens = novos; pedirDesenho();
-  for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.agarrada = null; m.giro = null; m.redim = null; m.querTam = null; }
-}
+function trocarItens(novos) { itens = novos; for (const m of maos) { m.tracoAtual = null; m.pendentes = []; } pedirDesenho(); }
 function limpar() { novasFormas = 0; trocarItens([]); }
 
 // ---------- páginas enviadas: slides de .pptx e imagens ----------
@@ -1034,28 +1047,31 @@ function paginasRecebidas(resultado) {
   recado(linhas.join('\n') || 'Nenhum arquivo recebido.', resultado.recusados.length || linhas.length > 1 ? 12000 : 4000);
 }
 
+function desligarCaneta() { canetaAtiva = false; for (const m of maos) { m.tracoAtual = null; m.pendentes = []; } pedirDesenho(); }
+
 function clicar(x, y) {
   pedirDesenho();
   x = Math.round(x); y = Math.round(y);
   const b = botaoEm(x, y);
   el('clique').textContent = x + ', ' + y + (b ? ' → ' + (b.valor && b.tipo !== 'cor' ? b.valor : b.tipo) : ' → nada');
-  if (!b) return;
-  if (b.tipo === 'cor') cor = b.valor;
+  if (!b) { painelAberto = null; return; }      // clique fora do menu fecha o painel aberto
+  if (b.tipo === 'barra' || b.tipo === 'painel') return;
+  piscaPor.set(idDe(b), piscaAte = performance.now() + 220);
+  if (b.tipo === 'menu') painelAberto = painelAberto === b.valor ? null : b.valor;
+  else if (b.tipo === 'recolher') { menuAberto = false; painelAberto = null; }
+  else if (b.tipo === 'expandir') menuAberto = true;
+  else if (b.tipo === 'ant') irParaPagina(paginaAtual - 1);
+  else if (b.tipo === 'prox') irParaPagina(paginaAtual + 1);
+  else if (b.tipo === 'cor') cor = b.valor;
   else if (b.tipo === 'tam') tam = b.valor;
   else if (b.tipo === 'forma') {
     const desloc = (novasFormas++ % 6) * 28;      // cada nova forma nasce um pouco deslocada da anterior
-    // nasce no meio da área livre: à direita do painel na tela deitada, abaixo dele na tela em pé
-    const direita = PAINEL.x + PAINEL.w * PAINEL.k, baixo = PAINEL.y + PAINEL.h * PAINEL.k;
-    const cx = W - direita > 420 ? (direita + W) / 2 : W / 2, cy = W - direita > 420 ? H / 2 : (baixo + H) / 2;
+    const cx = ((menuAberto ? 56 * K : 0) + W) / 2, cy = H / 2;      // nasce no meio da área livre, à direita do menu
     itens.push({ tipo: b.valor, x: cx - 70 + desloc, y: cy - 70 + desloc, cor, tam, rot: 0, esc: 1 });
   }
   else if (b.tipo === 'limpar') limpar();
   else if (b.tipo === 'camera') { cameraVisivel = !cameraVisivel; aplicarCamadas(); }
-  else if (b.tipo === 'caneta') {
-    canetaAtiva = !canetaAtiva;
-    if (!canetaAtiva) for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; m.querDesde = 0; }   // quem estava desenhando para na hora
-  }
-  b.piscaAte = piscaAte = performance.now() + 220;
+  else if (b.tipo === 'caneta') { if (canetaAtiva) desligarCaneta(); else canetaAtiva = true; }
 }
 
 // No celular chegam menos quadros por segundo; a suavização é mais leve para o cursor não ficar para trás da mão
@@ -1078,37 +1094,24 @@ class Suave {
 // ---------- estado de cada mão ----------
 class Mao {
   constructor() {
-    this.fx = new Suave(); this.fy = new Suave();       // ponta do indicador
-    this.gx = new Suave(); this.gy = new Suave();       // ponto da pinça
-    this.bx = new Suave(); this.by = new Suave();       // borracha
-    this.fe = new Suave(2.5, 1.5);                      // abertura polegar-indicador
-    this.fr = new Suave(2.5, 1.5);                      // ângulo, em radianos
+    this.fx = new Suave(); this.fy = new Suave();       // ponta do indicador, suavizada
+    this.gx = new Suave(); this.gy = new Suave();       // ponto entre polegar e indicador, suavizado
     this.lm = null;                 // 21 pontos em coordenadas da lousa, ou null se sumiu neste quadro
     this.punho = [0, 0];
-    this.dedos = null;
-    this.ponta = null; this.pontoPinca = null;
+    this.dedos = null;              // [polegar, indicador, médio, anelar, mínimo], 1 = erguido
+    this.ponta = null;              // ponta do indicador, suavizada
+    this.pontoPinca = null;         // meio entre as pontas do polegar e do indicador, suavizado
     this.palmaCima = false;
-    this.pinca = false; this.agarrada = null; this.agX = 0; this.agY = 0;
-    this.soltouEm = 0;
-    this.redim = null;              // {forma, base, a0, hist, invalido} enquanto a forma muda de tamanho
-    this.querTam = null;            // {forma, t}: gesto de tamanho sobre uma forma, esperando firmar
-    this.bloqueioTam = false;       // depois de travar fechando a pinça, só recomeça ao desfazer o gesto
-    this.giro = null;               // {forma, rot0, acum, angAnt, perdido}
-    this.pontoGiro = null;
-    this.modoDoisDedos = null;      // 'giro' ou 'borracha'
-    this.borracha = null;
-    this.tracoAtual = null; this.pendentes = []; this.inicioPausa = 0; this.querDesde = 0;
-    this.historico = []; this.ultimoApontar = 0; this.podeClicar = false;
-    this.travaDesde = 0; this.travada = false;          // mindinho para fora: a mão não faz nada
-    this.limparDesde = 0; this.limpou = false;
+    this.medidas = null;            // ver processarMao
+    this.palmaFrente = null;        // true = palma virada para a câmera
+    this.abrirDesde = 0; this.abertaVista = 0;     // contagem do sinal da palma aberta
+    this.tracoAtual = null; this.pendentes = []; this.inicioPausa = 0; this.querDesde = 0; this.esperaAte = 0;   // lápis
     this.semDesde = 0;
     this.leitura = '';
   }
-  soltar(agora) { if (this.pinca) this.soltouEm = agora; this.pinca = false; this.agarrada = null; }
-  largarTudo(agora) {              // a mão sumiu de verdade: tudo fica como está
-    this.soltar(agora); this.giro = null; this.redim = null; this.querTam = null; this.modoDoisDedos = null;
-    this.tracoAtual = null; this.pendentes = []; this.ponta = null; this.pontoPinca = null;
-    for (const f of [this.fx, this.fy, this.gx, this.gy, this.bx, this.by, this.fe, this.fr]) f.reiniciar();
+  largarTudo() {                    // a mão sumiu de verdade: zera os filtros e encerra o traço
+    this.ponta = null; this.pontoPinca = null; this.medidas = null; this.tracoAtual = null; this.pendentes = [];
+    for (const f of [this.fx, this.fy, this.gx, this.gy]) f.reiniciar();
   }
 }
 
@@ -1132,8 +1135,6 @@ function ajustarTela() {
   const pl = Math.round(lw * dpr), pa = Math.round(lh * dpr);
   if (tela.width !== pl || tela.height !== pa) { tela.width = pl; tela.height = pa; }     // mexer no tamanho apaga a lousa: só quando muda
   chaveItens = null; chavePainel = null; pedirDesenho();
-  PAINEL.k = MOVEL ? 1.3 : 1;
-  PAINEL.x = W >= 1000 ? 110 : 80; PAINEL.y = W >= 1000 ? 70 : 190;   // na tela em pé os botões do topo ocupam duas linhas
   for (const it of itens) if (it.tipo !== 'traco') {              // formas que ficaram fora da tela voltam para dentro
     it.x = Math.min(W - 20, Math.max(20, it.x)); it.y = Math.min(H - 20, Math.max(20, it.y));
   }
@@ -1146,29 +1147,24 @@ function enquadre() {
   return { ox: (W - dw) / 2, oy: (H - dh) / 2, dw, dh };
 }
 
-// ---------- rastreador: escolha automática do que é mais rápido neste aparelho ----------
-// Duas coisas mudam muito de um aparelho para outro, e não há como saber de antemão qual ganha:
-//   - o processador: o gráfico (GPU) costuma ser várias vezes mais rápido, mas em máquina sem placa gráfica de verdade é muito pior;
-//   - a imagem entregue ao rastreador: direta da câmera, ou uma cópia reduzida.
-// Por isso a página mede nos primeiros segundos de uso:
-//   1. começa no processador comum, que funciona em todo lugar, e mede as fontes de imagem;
-//   2. se o resultado não for bom o bastante, faz uma prova curta do processador gráfico, e desiste dela ao primeiro sinal de lentidão;
-//   3. fica com o mais rápido. O botão na Ajuda troca à mão.
+// ---------- rastreador ----------
+// Processador: a página abre no gráfico (GPU), que costuma ser várias vezes mais rápido que o comum (CPU).
+// Só cai para o comum se o gráfico não existir de verdade no aparelho, falhar, ou se mostrar lentíssimo nos primeiros quadros.
+// O botão na Ajuda troca à mão, e essa troca fica guardada no navegador para as próximas vezes.
+// Imagem: direta da câmera ou uma cópia reduzida; qual é mais rápida muda de aparelho para aparelho, então a página mede e escolhe.
 const URL_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const URL_MODELO = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const NOME_PROCESSADOR = { GPU: 'gráfico (GPU)', CPU: 'comum (CPU)' };
-const BOM_O_BASTANTE = 25;          // ms: se o processador comum rastreia nesse tempo, nem vale provar o gráfico
 const LADO_DETECCAO = 640;          // lado maior da cópia reduzida; abaixo disso o rastreador não fica mais rápido
 const AQUECIMENTO = 12, QUADROS_POR_FONTE = 10;
 const FONTES = ['direta', 'reduzida', 'reduzida em memória'];
-const PROVA_AQUECIMENTO = 4, PROVA_QUADROS = 12;     // a prova do processador gráfico: os primeiros quadros preparam, os seguintes contam
 
 let arquivosWasm = null;
 const detectores = { GPU: null, CPU: null };
-const resultados = { GPU: null, CPU: null };    // { ms, fonte } medido para cada processador
+const fonteMedida = { GPU: null, CPU: null };   // melhor fonte de imagem já medida para cada processador
 let delegado = null;                // processador em uso: 'GPU' ou 'CPU'
-let escolha = 'automática';         // 'automática' enquanto a página decide; 'decidida'; ou 'manual' depois que o botão é usado
-let prova = null;                   // { n, soma, qtd } enquanto o processador gráfico está em prova
+let escolha = 'padrão';             // 'padrão', 'manual' (botão) ou 'reserva' (o gráfico não serviu neste aparelho)
+let vigia = 0;                      // quadros do processador gráfico ainda sob observação logo depois de ligado
 let processador = '';
 
 // Procurar uma segunda mão custa caro: enquanto só uma aparece, o rastreador refaz a busca completa a cada quadro.
@@ -1182,19 +1178,20 @@ async function criarDetector(d) {
   return detectores[d];
 }
 
-function usar(d, fonteConhecida) {
+function usar(d) {
   delegado = d; detector = detectores[d]; processador = NOME_PROCESSADOR[d];
   msRastreio = 0; porSegundo = 0;
-  fonte = fonteConhecida || 'testando'; teste = novoTeste();
+  fonte = fonteMedida[d] || 'testando'; teste = novoTeste();
+  vigia = d === 'GPU' ? 6 : 0;
   rotuloProcessador();
 }
 
-// A decisão fica guardada no navegador: nas próximas vezes a página já abre no processador escolhido, sem medir de novo
-const CHAVE_ESCOLHA = 'quadro-no-ar.processador';
-function lembrar() { try { localStorage.setItem(CHAVE_ESCOLHA, delegado); } catch (e) { /* sem armazenamento: mede de novo na próxima vez */ } }
+// Só a troca feita pelo botão fica guardada
+const CHAVE_ESCOLHA = 'quadro-no-ar.processador-escolhido';
+function lembrar() { try { localStorage.setItem(CHAVE_ESCOLHA, delegado); } catch (e) { /* sem armazenamento: vale o padrão na próxima vez */ } }
 function lembrado() { try { const v = localStorage.getItem(CHAVE_ESCOLHA); return v === 'GPU' || v === 'CPU' ? v : null; } catch (e) { return null; } }
 
-// Sem placa gráfica de verdade, o "processador gráfico" do navegador é um programa imitando uma placa, e é lentíssimo: nem vale a prova
+// Sem placa gráfica de verdade, o "processador gráfico" do navegador é um programa imitando uma placa, e leva segundos por quadro
 function placaGraficaDeVerdade() {
   try {
     const c = document.createElement('canvas'), g = c.getContext('webgl2') || c.getContext('webgl');
@@ -1207,69 +1204,41 @@ function placaGraficaDeVerdade() {
 async function carregarDetector() {
   arquivosWasm = await FilesetResolver.forVisionTasks(URL_WASM);
   const antes = lembrado();
-  if (antes === 'GPU') {
-    try { await criarDetector('GPU'); escolha = 'decidida'; usar('GPU'); return; } catch (e) { /* não deu desta vez: segue pelo comum e mede de novo */ }
+  if (antes) escolha = 'manual';
+  if (antes ? antes === 'GPU' : placaGraficaDeVerdade()) {
+    try { await criarDetector('GPU'); usar('GPU'); return; } catch (e) { /* o gráfico não abriu: segue pelo comum */ }
   }
   await criarDetector('CPU');
-  if (antes === 'CPU') escolha = 'decidida';
+  if (!antes) escolha = 'reserva';
   usar('CPU');
 }
 
 function descartar(d) { try { if (detectores[d]) detectores[d].close(); } catch (e) { /* já fechado */ } detectores[d] = null; }
-function decidir() { escolha = 'decidida'; prova = null; lembrar(); rotuloProcessador(); }
 
-// Chamado quando termina a medição das fontes de imagem para o processador em uso
-function fimDaMedicao(ms) {
-  resultados[delegado] = { ms, fonte };
-  if (escolha !== 'automática') return;
-  if (delegado === 'GPU') { descartar('CPU'); decidir(); return; }      // o gráfico já passou na prova; agora tem também a melhor fonte
-  if (ms <= BOM_O_BASTANTE || resultados.GPU) { decidir(); return; }
-  if (!placaGraficaDeVerdade()) { resultados.GPU = { ms: Infinity, fonte: 'direta' }; decidir(); return; }
-  criarDetector('GPU')                                                   // o comum está lento: põe o gráfico à prova
-    .then(() => { if (escolha === 'automática') { usar('GPU', 'direta'); prova = { n: 0, soma: 0, qtd: 0 }; } })
-    .catch(() => { resultados.GPU = { ms: Infinity, fonte: 'direta' }; decidir(); });
-}
-
-function reprovarGPU() {
-  resultados.GPU = { ms: Infinity, fonte: 'direta' };
-  usar('CPU', resultados.CPU ? resultados.CPU.fonte : null);
-  descartar('GPU');
-  if (escolha === 'automática') decidir(); else { prova = null; rotuloProcessador(); }
-}
-
-// Um quadro da prova do processador gráfico. Sem placa gráfica de verdade cada quadro leva segundos: a prova acaba no primeiro sinal.
-function registrarProva(ms) {
-  const cpu = resultados.CPU.ms;
-  prova.n++;
-  if (ms > (prova.n === 1 ? 4000 : 1000)) { reprovarGPU(); return; }    // o primeiro quadro prepara o processador gráfico e pode demorar
-  if (prova.n <= PROVA_AQUECIMENTO) return;
-  prova.soma += ms; prova.qtd++;
-  const media = prova.soma / prova.qtd;
-  if (prova.qtd >= 3 && media > cpu * 1.5) { reprovarGPU(); return; }
-  if (prova.qtd >= PROVA_QUADROS) {
-    if (media < cpu * 0.85) { prova = null; usar('GPU'); }               // aprovado: falta só medir a melhor fonte de imagem para ele
-    else reprovarGPU();
-  }
-}
-
-// O rastreador falhou no meio do uso (acontece com o processador gráfico em alguns aparelhos): volta para o comum
+// O processador gráfico falhou ou está lentíssimo: passa para o comum
 let trocando = false;
 async function socorro() {
   if (trocando || delegado === 'CPU') return;
   trocando = true;
-  try { await criarDetector('CPU'); reprovarGPU(); } catch (e) { /* fica como está */ }
+  try { await criarDetector('CPU'); escolha = 'reserva'; usar('CPU'); descartar('GPU'); } catch (e) { /* fica como está */ }
   trocando = false;
+}
+
+// Os primeiros quadros do processador gráfico ficam sob observação: o primeiro prepara a placa e pode demorar; os seguintes, não
+function vigiar(ms) {
+  const n = 7 - vigia--;
+  if (ms > (n === 1 ? 4000 : 1000)) { vigia = 0; socorro(); }
 }
 
 function rotuloProcessador() {
   const b = el('btProcessador'); if (!b) return;
-  b.textContent = 'Processador: ' + processador + (prova ? ', em prova…' : escolha === 'automática' ? ', medindo…' : escolha === 'manual' ? ', escolhido à mão' : ', o mais rápido aqui') + ' (toque para trocar)';
+  b.textContent = 'Processador: ' + processador + (escolha === 'manual' ? ', escolhido à mão' : escolha === 'reserva' ? ', porque o gráfico não serviu neste aparelho' : '') + ' (toque para trocar)';
 }
 async function trocarProcessador() {
   if (trocando) return;
-  trocando = true; escolha = 'manual'; prova = null;
+  trocando = true;
   const alvo = delegado === 'GPU' ? 'CPU' : 'GPU';
-  try { await criarDetector(alvo); usar(alvo, resultados[alvo] && isFinite(resultados[alvo].ms) ? resultados[alvo].fonte : null); lembrar(); }
+  try { await criarDetector(alvo); escolha = 'manual'; usar(alvo); lembrar(); }
   catch (e) { recado('Este aparelho não conseguiu usar o processador ' + NOME_PROCESSADOR[alvo] + '.', 6000); rotuloProcessador(); }
   trocando = false;
 }
@@ -1299,7 +1268,7 @@ function registrarTeste(ms) {
     let melhor = 0;
     for (let i = 1; i < medias.length; i++) if (medias[i] < medias[melhor] * 0.9 && medias[i] < medias[0] * 0.9) melhor = i;   // a cópia só entra se ganhar com folga
     fonte = FONTES[melhor];
-    fimDaMedicao(medias[melhor]);
+    fonteMedida[delegado] = fonte;
   }
 }
 
@@ -1327,8 +1296,7 @@ function medir(ms, agora) {
     ultimoPainelDesempenho = agora;
     el('desempenho').textContent = 'rastreamento ' + msRastreio.toFixed(0) + ' ms · ' + porSegundo.toFixed(0) + ' por segundo · processador ' + processador
       + '\ncâmera ' + video.videoWidth + '×' + video.videoHeight + ' · lousa ' + tela.width + '×' + tela.height + ' · ' + (duasMaos ? 'duas mãos' : 'uma mão')
-      + ' · imagem ' + (fonte === 'testando' ? 'em teste' : fonte)
-      + (escolha === 'automática' ? '\nmedindo o que é mais rápido neste aparelho…' : '');
+      + ' · imagem ' + (fonte === 'testando' ? 'em teste' : fonte);
   }
 }
 
@@ -1410,242 +1378,178 @@ function formaEm(x, y) {
   return null;
 }
 const paraFrente = f => { itens.splice(itens.indexOf(f), 1); itens.push(f); };
-const outraMaoTem = (m, campo, f) => maos.some(o => o !== m && (campo === 'agarrada' ? o.agarrada === f : o[campo] && o[campo].forma === f));
-
-// Interrompe o traço só se a falha durar; falhas curtas são costuradas
-function pausarTraco(m, agora, pontoProvisorio, imediato) {
-  if (!m.tracoAtual) return;
-  if (!m.inicioPausa) m.inicioPausa = agora;
-  if (imediato || agora - m.inicioPausa > TOLERANCIA_TRACO) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; }
-  else if (pontoProvisorio) m.pendentes.push(pontoProvisorio);
+// Onde está a ponta do polegar, de lado a lado da palma: 0 = na linha da base do indicador, 1 = na base do mínimo,
+// negativo = para fora da mão. Polegar estirado dá bem negativo; dobrado para dentro da palma passa de 0.
+function posicaoPolegar(lm) {
+  const ux = lm[17][0] - lm[5][0], uy = lm[17][1] - lm[5][1], L2 = ux * ux + uy * uy || 1;
+  return ((lm[4][0] - lm[5][0]) * ux + (lm[4][1] - lm[5][1]) * uy) / L2;
 }
 
-function distSegmento(p, a, b) {
-  const vx = b[0] - a[0], vy = b[1] - a[1], c = vx * vx + vy * vy;
-  const t = c ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / c)) : 0;
-  return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy);
+const centroDaPalma = lm => [0, 5, 9, 13, 17].reduce((s, i) => [s[0] + lm[i][0] / 5, s[1] + lm[i][1] / 5], [0, 0]);
+const dentroDe = (p, a, margem = 0) => p[0] >= a.x - margem && p[0] <= a.x + a.w + margem && p[1] >= a.y - margem && p[1] <= a.y + a.h + margem;
+
+// ---------- sinal da palma aberta: abre o menu ----------
+// Palma virada para a câmera, os quatro dedos erguidos, apontando para cima e juntos (o polegar não conta).
+// Parado assim por 1,5 s (com anel de espera), o menu abre a partir do centro da palma. Uma área invisível do tamanho
+// da mão fica marcada nesse momento; o menu continua aberto enquanto a mão estiver nela.
+const SINAL_PALMA = 1;              // medido na foto da palma de frente (e na mesma foto espelhada): volta x lado = +1
+const ESPERA_MENU = 1500;           // ms com o sinal para abrir o menu
+const ESPERA_OPCAO = 1000;          // ms com o indicador pousado numa opção do menu
+const TOLERANCIA_TRACO = 150;       // ms: falhas de leitura mais curtas que isso não quebram o traço
+const TOLERANCIA_SINAL = 250;       // ms de leitura falhando sem zerar a contagem
+const TOLERANCIA_FORA = 500;        // ms que a mão pode passar fora da área antes de o menu fechar
+const DEDOS_PARA_CIMA = 30;         // graus: inclinação máxima da mão em relação à vertical
+const DEDOS_JUNTOS = 0.40;          // maior vão permitido entre pontas vizinhas (proporcional à palma)
+const POLEGAR_FORA = -0.35, POLEGAR_DENTRO = 0.15;   // faixa do polegar "junto à mão" (ver posicaoPolegar)
+const OPCOES_RADIAIS = [            // paleta no alto, lápis embaixo à esquerda, triângulo embaixo à direita
+  { id: 'cores', angulo: -90 },
+  { id: 'traco', angulo: 150 },
+  { id: 'formas', angulo: 30 }
+];
+let radial = null;                  // { mao, c, palma, area, foraDesde, mira }
+// O que cada opção faz quando o indicador pousa nela por 1 s. Opções sem ação ainda não respondem.
+const ACOES_RADIAIS = {
+  traco: () => { canetaAtiva = true; }      // libera o lápis
+};
+
+function palmaAberta(m) {
+  const lm = m.lm, d = m.dedos, md = m.medidas;
+  if (!lm || !md || !(d[1] && d[2] && d[3] && d[4])) return false;
+  if (md.inclinDedos > DEDOS_PARA_CIMA) return false;
+  for (const p of [8, 12, 16, 20]) if (lm[p][1] >= lm[p - 3][1]) return false;    // cada ponta acima da base do dedo
+  if (md.juntos > DEDOS_JUNTOS) return false;
+  if (md.polegar < POLEGAR_FORA || md.polegar > POLEGAR_DENTRO) return false;   // polegar junto à mão: nem estirado nem dobrado para dentro
+  return m.palmaFrente !== false;               // sem o lado da mão o rastreador não diz a face; aí não bloqueia
 }
 
-// Apaga a parte dos traços que a borracha toca, dividindo o traço em pedaços
-function apagar(c) {
-  const novo = [];
-  for (const it of itens) {
-    if (it.tipo !== 'traco') { novo.push(it); continue; }
-    let pedaco = [], mudou = false;
-    const pedacos = [];
-    const fechar = () => { if (pedaco.length) pedacos.push(pedaco); pedaco = []; };
-    for (const p of it.pontos) {
-      if (dist(p, c) < RAIO_BORRACHA + it.tam / 2) { fechar(); mudou = true; continue; }
-      if (pedaco.length && distSegmento(c, pedaco[pedaco.length - 1], p) < RAIO_BORRACHA) { fechar(); mudou = true; }
-      pedaco.push(p);
-    }
-    fechar();
-    if (!mudou) { novo.push(it); continue; }
-    // o traço foi cortado: quem estava desenhando nele para, em vez de continuar num traço que não existe mais
-    for (const m of maos) if (m.tracoAtual === it) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; }
-    for (const pts of pedacos) novo.push({ tipo: 'traco', cor: it.cor, tam: it.tam, pontos: pts });
-  }
-  itens = novo;
+function abrirRadial(m) {
+  const lm = m.lm, xs = lm.map(p => p[0]), ys = lm.map(p => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), folga = 0.15 * Math.max(x1 - x0, y1 - y0);
+  radial = { mao: m, c: m.medidas.centro, palma: m.medidas.palma, foraDesde: 0,
+             area: { x: x0 - folga, y: y0 - folga, w: x1 - x0 + folga * 2, h: y1 - y0 + folga * 2 } };     // fixa: não acompanha a mão
+  m.abrirDesde = 0; painelAberto = null;
+  pedirDesenho();
+}
+function fecharRadial() { radial = null; pedirDesenho(); }
+
+function opcoesRadiais() {
+  const R = Math.max(0.75 * radial.palma, 60 * K), r = Math.max(0.32 * radial.palma, 30 * K);
+  return OPCOES_RADIAIS.map(o => ({ id: o.id, r, R, angulo: o.angulo, x: radial.c[0] + Math.cos(o.angulo * Math.PI / 180) * R, y: radial.c[1] + Math.sin(o.angulo * Math.PI / 180) * R }));
 }
 
-function processarMao(m, agora) {
-  m.borracha = null; m.pontoGiro = null;
-  const lm = m.lm;
-  if (!lm) {
-    m.dedos = null; m.querDesde = 0; m.leitura = ''; m.travada = false; m.travaDesde = 0; m.limparDesde = 0;
-    if (!m.semDesde) m.semDesde = agora;
-    pausarTraco(m, agora, null, false);
-    if (agora - m.semDesde > 300) m.largarTudo(agora);
-    return;
-  }
-  m.semDesde = 0; m.punho = lm[0];
-  m.dedos = dedosLevantados(lm);
-  const dedos = m.dedos, d = dedos.join('');
-  const outros = d.slice(1);                    // indicador, médio, anelar, mínimo (sem o polegar)
-  if (d !== '01000') m.querDesde = 0;
-  const x = m.fx.passo(lm[8][0], agora), y = m.fy.passo(lm[8][1], agora);
-  m.ponta = [x, y];
-  const pm = meio(lm[4], lm[8]);
-  const px = m.gx.passo(pm[0], agora), py = m.gy.passo(pm[1], agora);
-  m.pontoPinca = [px, py];
-
-  const palma = dist(lm[0], lm[9]) || 1;
-  const abertura = dist(lm[4], lm[8]) / palma;
-  const dobra = dist(lm[8], lm[5]) / palma;
-  const afast = dist(lm[8], lm[12]) / palma;
-  const afast2 = dist(lm[12], lm[16]) / palma;
-  const inclin = inclinacaoPalma(lm, palma);
-  if (inclin > PALMA_CIMA) m.palmaCima = true; else if (inclin < PALMA_BAIXO) m.palmaCima = false;
-  if (leituraVisivel) m.leitura = '[' + dedos.join(',') + ']  pinça ' + abertura.toFixed(2) + (m.pinca ? ' (fechada)' : '') + '  dobra ' + dobra.toFixed(2)
-            + '\n   ind-médio ' + afast.toFixed(2) + '  méd-anelar ' + afast2.toFixed(2) + '  palma ' + (m.palmaCima ? 'cima' : 'baixo') + ' (' + inclin.toFixed(2) + ')'
-            + (m.travada ? '  TRAVADA' : '');
-
-  // ---- limpar tudo: indicador + médio + anelar erguidos e colados, polegar e mindinho dobrados, parados por um instante ----
-  const querLimpar = d === '01110' && afast < LIMPAR_JUNTOS && afast2 < LIMPAR_JUNTOS;
-  if (!querLimpar) { m.limparDesde = 0; m.limpou = false; }
-
-  // ---- trava: com o mindinho para fora, a mão solta o que estiver fazendo e não faz mais nada ----
-  if (dedos[4] === 1) { if (!m.travaDesde) m.travaDesde = agora; } else { m.travaDesde = 0; m.travada = false; }
-  if (m.travaDesde && agora - m.travaDesde >= FIRMEZA_TRAVA) {
-    m.travada = true;
-    m.soltar(agora);                            // a forma arrastada fica onde está
-    if (m.redim) {                              // o tamanho fica como estava um instante antes de o mindinho sair
-      const antes = m.redim.hist.find(h => h.t >= m.travaDesde - 150);
-      if (antes) m.redim.forma.esc = antes.e;
-      m.redim = null;
-    }
-    m.giro = null; m.querTam = null; m.modoDoisDedos = null;
-    m.podeClicar = false; m.querDesde = 0;
+function processarGestos(m, agora) {
+  const d = m.dedos.join('');
+  if (radial && radial.mao === m) {
     pausarTraco(m, agora, null, true);
-    return;
-  }
-
-  // ---- pinça, palma para baixo: arrastar a forma ----
-  if (!m.pinca && !m.redim && !m.palmaCima && abertura < PINCA_FECHA && dobra > DOBRA_MAXIMA) {
-    m.pinca = true;
-    const f = formaEm(px, py);
-    m.agarrada = f && !outraMaoTem(m, 'agarrada', f) ? f : null;
-    if (m.agarrada) { m.agX = f.x - px; m.agY = f.y - py; paraFrente(f); }
-  } else if (m.pinca && abertura > PINCA_ABRE) {
-    m.soltar(agora);                            // a forma fica onde está
-  }
-  if (m.pinca) {
-    if (m.agarrada) {
-      m.agarrada.x = Math.min(W - 20, Math.max(20, px + m.agX));
-      m.agarrada.y = Math.min(H - 20, Math.max(20, py + m.agY));
+    // a mão está na área se o centro da palma ou a ponta do indicador estiverem nela; o indicador sobre uma opção
+    // também conta, porque as opções de baixo ficam para fora do contorno da mão
+    const sobreOpcao = opcoesRadiais().some(o => Math.hypot(m.ponta[0] - o.x, m.ponta[1] - o.y) <= o.r * 1.4);
+    if (dentroDe(m.medidas.centro, radial.area) || dentroDe(m.ponta, radial.area) || sobreOpcao) radial.foraDesde = 0;
+    else {
+      if (!radial.foraDesde) radial.foraDesde = agora;
+      if (agora - radial.foraDesde > TOLERANCIA_FORA) { fecharRadial(); return; }
     }
-    pausarTraco(m, agora, null, true);
-    m.podeClicar = false;
-    return;
-  }
-
-  // ---- tamanho, palma para cima: a forma cresce e encolhe com a abertura entre polegar e indicador ----
-  const posturaTam = m.palmaCima && outros.slice(1) === '000';     // médio, anelar e mínimo fechados
-  if (!posturaTam) { m.bloqueioTam = false; m.querTam = null; }
-  if (m.redim) {
-    const r = m.redim;
-    if (posturaTam) {
-      r.invalido = 0;
-      const a = m.fe.passo(abertura, agora);
-      const razao = Math.max(a, PISO_ABERTURA) / Math.max(r.a0, PISO_ABERTURA);   // vale 1 na abertura em que o gesto começou
-      r.forma.esc = Math.max(ESCALA_MIN, Math.min(ESCALA_MAX, r.base * razao));
-      r.hist.push({ t: agora, e: r.forma.esc });
-      r.hist = r.hist.filter(h => agora - h.t < 500);
-      if (r.a0 > COMECOU_ABERTO && a < PINCA_FECHA) {      // começou aberto e fechou a pinça: fim do diminuir, o tamanho fica
-        m.redim = null; m.bloqueioTam = true; m.soltouEm = agora;
-      }
-    } else {
-      // o gesto foi desfeito (abriu a mão, virou a palma): trava no tamanho de pouco antes de desfazer
-      if (!r.invalido) r.invalido = agora;
-      if (agora - r.invalido > 150) {
-        const antes = r.hist.find(h => h.t >= r.invalido - 150);
-        if (antes) r.forma.esc = antes.e;
-        m.redim = null; m.soltouEm = agora;
-      }
-    }
-    if (m.redim) { pausarTraco(m, agora, null, true); m.podeClicar = false; return; }
-  } else if (posturaTam && !m.bloqueioTam) {
-    const f = formaEm(px, py);
-    if (!f || outraMaoTem(m, 'redim', f)) m.querTam = null;
-    else if (!m.querTam || m.querTam.forma !== f) m.querTam = { forma: f, t: agora };
-    else if (agora - m.querTam.t > FIRMEZA_TAMANHO) {
-      m.fe.reiniciar();
-      m.redim = { forma: f, base: f.esc || 1, a0: m.fe.passo(abertura, agora), hist: [], invalido: 0 };
-      paraFrente(f);
-      m.querTam = null;
-      pausarTraco(m, agora, null, true);
-      m.podeClicar = false;
-      return;
-    }
-  }
-
-  if (agora - m.soltouEm < ESPERA_APOS_SOLTAR) {  // a mão ainda está se abrindo: não desenha, não apaga, não clica
-    pausarTraco(m, agora, null, true);
-    m.querDesde = 0;
-    return;
-  }
-
-  // ---- indicador + médio erguidos: juntos = borracha, afastados em V = girar ----
-  // Entre os dois limites vale o modo que já estava ativo; no primeiro quadro, o polegar desempata.
-  if (outros === '1100') {
-    if (afast > DEDOS_ABERTOS) m.modoDoisDedos = 'giro';
-    else if (afast < DEDOS_JUNTOS) m.modoDoisDedos = 'borracha';
-    else if (!m.modoDoisDedos) m.modoDoisDedos = dedos[0] ? 'giro' : 'borracha';
-  } else {
-    m.modoDoisDedos = null;
-  }
-
-  // ---- girar: a forma acompanha o ângulo da mão ----
-  if (m.modoDoisDedos === 'giro') {
-    const ang = Math.atan2(lm[9][1] - lm[0][1], lm[9][0] - lm[0][0]);        // direção punho -> base do dedo médio
-    const pg = meio(lm[8], lm[12]);
-    if (!m.giro) m.giro = { forma: null, rot0: 0, acum: 0, angAnt: ang, perdido: 0 };
-    const g = m.giro;
-    if (!g.forma) {                             // pega a forma sob os dedos ou sob a palma
-      const f = formaEm(pg[0], pg[1]) || formaEm(lm[9][0], lm[9][1]);
-      if (f && !outraMaoTem(m, 'giro', f)) { g.forma = f; g.rot0 = f.rot || 0; g.acum = 0; m.fr.reiniciar(); paraFrente(f); }
-    }
-    let dif = ang - g.angAnt;
-    dif = Math.atan2(Math.sin(dif), Math.cos(dif));                          // menor diferença entre os dois ângulos
-    g.acum += dif; g.angAnt = ang; g.perdido = 0;
-    if (g.forma) g.forma.rot = g.rot0 + m.fr.passo(g.acum, agora);
-    m.pontoGiro = pg;
-    pausarTraco(m, agora, null, true);
-    m.podeClicar = false;
-    return;
-  }
-  if (m.giro) {                                 // tolera falhas curtas de leitura sem soltar a forma
-    if (!m.giro.perdido) m.giro.perdido = agora;
-    if (agora - m.giro.perdido > 200) m.giro = null;
-    else { pausarTraco(m, agora, null, true); return; }
-  }
-
-  // ---- apontar e clicar ----
-  if (outros === '1000') {
-    m.historico.push({ t: agora, x, y });
-    m.historico = m.historico.filter(p => agora - p.t < 600);
-    m.ultimoApontar = agora;
-    m.podeClicar = true;
-  }
-  if (outros === '0000' && m.podeClicar && agora - m.ultimoApontar < 300) {
-    const alvo = m.historico.find(p => p.t >= m.ultimoApontar - JANELA_CLIQUE);
-    if (alvo) clicar(alvo.x, alvo.y);
-    m.podeClicar = false;
-  }
-
-  // ---- borracha (só com "Caneta e borracha" ligado no painel) ----
-  if (m.modoDoisDedos === 'borracha') {
-    pausarTraco(m, agora, null, true);
-    m.podeClicar = false;
-    if (canetaAtiva) {
-      const pb = meio(lm[8], lm[12]);
-      m.borracha = [m.bx.passo(pb[0], agora), m.by.passo(pb[1], agora)];
-      apagar(m.borracha);
+    // indicador apontando (só ele erguido) e pousado numa opção com ação: conta 1 s
+    const sob = d.slice(1) === '1000' ? opcoesRadiais().find(o => ACOES_RADIAIS[o.id] && Math.hypot(m.ponta[0] - o.x, m.ponta[1] - o.y) <= o.r * 1.1) : null;
+    if (!sob) radial.mira = null;
+    else if (!radial.mira || radial.mira.id !== sob.id) radial.mira = { id: sob.id, desde: agora };
+    else if (agora - radial.mira.desde >= ESPERA_OPCAO) {
+      ACOES_RADIAIS[sob.id]();
+      m.esperaAte = agora + 500;                // meio segundo antes de o dedo valer como lápis, para não sair um risco no menu
+      fecharRadial();
     }
     return;
   }
+  if (!radial) {
+    if (palmaAberta(m)) {
+      m.abertaVista = agora;
+      if (!m.abrirDesde) m.abrirDesde = agora;
+      if (agora - m.abrirDesde >= ESPERA_MENU) { pausarTraco(m, agora, null, true); abrirRadial(m); return; }
+    } else if (m.abrirDesde && agora - m.abertaVista > TOLERANCIA_SINAL) m.abrirDesde = 0;
+  }
+  desenhar(m, agora, d);
+}
 
-  // ---- desenhar (só com "Caneta e borracha" ligado no painel; desligado, o gesto só aponta e clica) ----
-  if (canetaAtiva && d === '01000' && !noPainel(x, y)) {
+// ---------- lápis ----------
+// Com o lápis liberado, só o indicador erguido desenha. Falhas curtas de leitura não quebram o traço.
+function desenhar(m, agora, d) {
+  const [x, y] = m.ponta;
+  if (canetaAtiva && agora >= m.esperaAte && !m.abrirDesde && d === '01000' && !noPainel(x, y)) {
     if (!m.tracoAtual) {
-      // espera o gesto firmar por 80 ms, para não deixar um ponto solto ao passar por ele
       if (!m.querDesde) m.querDesde = agora;
-      if (agora - m.querDesde < 80) return;
+      if (agora - m.querDesde < 80) return;     // espera o gesto firmar, para não deixar um ponto solto ao passar por ele
       m.tracoAtual = { tipo: 'traco', cor, tam, pontos: [] }; itens.push(m.tracoAtual);
     }
     if (m.pendentes.length) { m.tracoAtual.pontos.push(...m.pendentes); m.pendentes = []; }
     m.inicioPausa = 0;
     const pts = m.tracoAtual.pontos, ult = pts[pts.length - 1];
     if (!ult || dist(ult, [x, y]) >= 1.5) pts.push([x, y]);
+    pedirDesenho();
   } else {
-    // Dedo ainda erguido (ex.: polegar lido errado por um quadro): guarda o ponto provisoriamente
-    pausarTraco(m, agora, dedos[1] === 1 && !noPainel(x, y) ? [x, y] : null, noPainel(x, y));
+    m.querDesde = 0;
+    pausarTraco(m, agora, canetaAtiva && m.dedos[1] === 1 && !noPainel(x, y) ? [x, y] : null, !canetaAtiva || noPainel(x, y));
   }
+}
 
-  if (querLimpar && canetaAtiva && !m.limpou) {          // o gesto de limpar tudo acompanha a caneta; o botão Limpar vale sempre
-    if (!m.limparDesde) m.limparDesde = agora;
-    if (agora - m.limparDesde >= FIRMEZA_LIMPAR) { limpar(); m.limpou = true; }   // só apaga de novo depois de desfazer o gesto
+// Interrompe o traço só se a falha durar; pontos lidos durante uma falha curta são costurados depois
+function pausarTraco(m, agora, pontoProvisorio, imediato) {
+  if (!m.tracoAtual) return;
+  if (!m.inicioPausa) m.inicioPausa = agora;
+  if (imediato || agora - m.inicioPausa > TOLERANCIA_TRACO) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; pedirDesenho(); }
+  else if (pontoProvisorio) m.pendentes.push(pontoProvisorio);
+}
+
+// ---------- leitura de cada mão ----------
+// Nenhum comando está configurado: aqui só se leem as mãos. Cada mão em `maos` fica com:
+//   m.lm          os 21 pontos do MediaPipe, em coordenadas da lousa (0 punho, 4 ponta do polegar, 8 ponta do indicador,
+//                 12 do médio, 16 do anelar, 20 do mínimo; 5, 9, 13, 17 são as bases dos dedos)
+//   m.dedos       [polegar, indicador, médio, anelar, mínimo], 1 = erguido (vale com a mão em qualquer ângulo)
+//   m.ponta       ponta do indicador, suavizada
+//   m.pontoPinca  meio entre polegar e indicador, suavizado
+//   m.palmaCima   palma para cima (com a mão deitada)
+//   m.medidas     { palma, abertura, dobra, afast, afast2, inclin, centro } — distâncias divididas pelo tamanho da palma:
+//                 abertura = polegar-indicador, dobra = ponta do indicador até a base dele, afast = indicador-médio,
+//                 afast2 = médio-anelar, inclin = quanto o polegar está acima do indicador, centro = centro da palma
+function processarMao(m, agora) {
+  const lm = m.lm;
+  if (!lm) {
+    m.dedos = null; m.leitura = ''; m.abrirDesde = 0;
+    if (radial && radial.mao === m && agora - (m.semDesde || agora) > 250) fecharRadial();   // a mão sumiu: o menu dela fecha
+    if (!m.semDesde) m.semDesde = agora;
+    pausarTraco(m, agora, null, false);
+    if (agora - m.semDesde > 300) m.largarTudo();
+    return;
   }
+  m.semDesde = 0; m.punho = lm[0];
+  m.dedos = dedosLevantados(lm);
+  m.ponta = [m.fx.passo(lm[8][0], agora), m.fy.passo(lm[8][1], agora)];
+  const pm = meio(lm[4], lm[8]);
+  m.pontoPinca = [m.gx.passo(pm[0], agora), m.gy.passo(pm[1], agora)];
+
+  const palma = dist(lm[0], lm[9]) || 1;
+  const md = m.medidas = {
+    palma,
+    abertura: dist(lm[4], lm[8]) / palma,
+    dobra: dist(lm[8], lm[5]) / palma,
+    afast: dist(lm[8], lm[12]) / palma,
+    afast2: dist(lm[12], lm[16]) / palma,
+    inclin: inclinacaoPalma(lm, palma),
+    centro: centroDaPalma(lm),
+    inclinDedos: Math.abs(Math.atan2(lm[9][0] - lm[0][0], lm[0][1] - lm[9][1])) * 180 / Math.PI,   // 0° = dedos para cima
+    juntos: Math.max(dist(lm[8], lm[12]), dist(lm[12], lm[16]), dist(lm[16], lm[20])) / palma,       // maior vão entre pontas vizinhas
+    polegar: posicaoPolegar(lm)
+  };
+  if (md.inclin > PALMA_CIMA) m.palmaCima = true; else if (md.inclin < PALMA_BAIXO) m.palmaCima = false;
+  // Palma de frente ou de costas para a câmera: o sentido da volta punho -> base do indicador -> base do mínimo
+  // se inverte quando a mão vira; combinado com o lado da mão (direita/esquerda) diz qual face está virada para a câmera.
+  const a = [lm[5][0] - lm[0][0], lm[5][1] - lm[0][1]], b = [lm[17][0] - lm[0][0], lm[17][1] - lm[0][1]];
+  md.volta = Math.sign(a[0] * b[1] - a[1] * b[0]) || 1;
+  m.palmaFrente = lm.lado ? md.volta * (lm.lado === 'Right' ? 1 : -1) === SINAL_PALMA : null;   // null: sem o lado, não dá para saber
+  processarGestos(m, agora);
+  if (leituraVisivel) m.leitura = '[' + m.dedos.join(',') + ']  pinça ' + md.abertura.toFixed(2) + '  dobra ' + md.dobra.toFixed(2)
+            + '\n   ind-médio ' + md.afast.toFixed(2) + '  méd-anelar ' + md.afast2.toFixed(2) + '  palma ' + (m.palmaCima ? 'cima' : 'baixo') + ' (' + md.inclin.toFixed(2) + ')'
+            + '\n   ' + (m.palmaFrente == null ? 'face ?' : m.palmaFrente ? 'palma de frente' : 'costas da mão') + ' (' + lm.lado + ' ' + md.volta + ')'
+            + '  dedos ' + md.inclinDedos.toFixed(0) + '°  juntos ' + md.juntos.toFixed(2) + '  polegar ' + md.polegar.toFixed(2) + (palmaAberta(m) ? '  → PALMA ABERTA' : '');
 }
 
 // ---------- desenho da tela ----------
@@ -1680,7 +1584,6 @@ function desenharTraco(t) {
   ctx.stroke();
 }
 
-const presa = it => maos.some(m => m.agarrada === it || (m.giro && m.giro.forma === it) || (m.redim && m.redim.forma === it));
 
 function desenharItens(lista) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -1692,55 +1595,78 @@ function desenharItens(lista) {
     caminhoForma(it.tipo, 0, 0, 1);
     ctx.globalAlpha = 0.16; ctx.fillStyle = it.cor; ctx.fill(); ctx.globalAlpha = 1;
     ctx.strokeStyle = it.cor; ctx.lineWidth = it.tam / e; ctx.stroke();      // a espessura do contorno não cresce junto
-    if (presa(it)) {                             // moldura tracejada enquanto está presa a uma mão
-      const [mw, mh] = MEIA[it.tipo], mg = 14 / e;
-      ctx.setLineDash([10 / e, 8 / e]); ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 3 / e;
-      ctx.strokeRect(-mw - mg, -mh - mg, (mw + mg) * 2, (mh + mg) * 2);
-    }
     ctx.restore();
   }
 }
 
-function desenharPainel(agora, sobre) {
-  ctx.save();
-  ctx.translate(PAINEL.x, PAINEL.y); ctx.scale(PAINEL.k, PAINEL.k);
-  retArred(0, 0, PAINEL.w, PAINEL.h, 12);
-  ctx.fillStyle = '#e4e6ec'; ctx.fill();
-  ctx.strokeStyle = '#c9ccd6'; ctx.lineWidth = 2; ctx.stroke();
-
-  ctx.fillStyle = '#4a5060'; ctx.font = '600 13px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  for (const [texto, dy] of ROTULOS) ctx.fillText(texto, 10, dy);
-
-  for (const b of botoes) {
-    const selecionado = (b.tipo === 'cor' && b.valor === cor) || (b.tipo === 'tam' && b.valor === tam) || (b.tipo === 'camera' && cameraVisivel) || (b.tipo === 'caneta' && canetaAtiva);
-    const piscando = b.piscaAte && agora < b.piscaAte;
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-
-    retArred(b.x, b.y, b.w, b.h, 8);
-    ctx.fillStyle = b.tipo === 'cor' ? b.valor : (piscando ? '#b9c4ff' : '#ffffff');
-    ctx.fill();
-
-    if (b.tipo === 'tam') {
-      ctx.fillStyle = '#111111'; ctx.beginPath(); ctx.arc(cx, cy, b.valor / 2 + 1, 0, Math.PI * 2); ctx.fill();
-    } else if (b.tipo === 'forma') {
-      caminhoForma(b.valor, cx, cy, 0.17);
-      ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-    } else if (b.tipo === 'limpar' || b.tipo === 'camera' || b.tipo === 'caneta') {
-      ctx.fillStyle = '#111111'; ctx.font = '600 13px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(b.tipo === 'limpar' ? 'Limpar' : b.tipo === 'camera' ? 'Câmera' : 'Caneta e borracha', cx, cy);
-    }
-
-    retArred(b.x, b.y, b.w, b.h, 8);
-    if (selecionado) { ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 4; }
-    else if (sobre.has(b)) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 3; }
-    else { ctx.strokeStyle = '#b4b8c4'; ctx.lineWidth = 2; }
-    ctx.stroke();
-    if (selecionado && b.tipo === 'cor') {
-      retArred(b.x + 4, b.y + 4, b.w - 8, b.h - 8, 5);
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
-    }
+// Ícones do menu, desenhados no quadrado (x, y, l)
+function icone(id, x, y, l) {
+  const cx = x + l / 2, cy = y + l / 2, u = l / 44;          // u: unidade de desenho, o ícone foi pensado em 44 x 44
+  ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.fillStyle = '#111111'; ctx.strokeStyle = '#111111';
+  if (id === 'cores') {                                       // paleta: disco escuro com furos e a cor atual
+    ctx.beginPath(); ctx.ellipse(cx, cy, 17 * u, 15 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e4e6ec';
+    for (const [dx, dy] of [[-8, -6], [0, -9], [8, -6], [-10, 3]]) { ctx.beginPath(); ctx.arc(cx + dx * u, cy + dy * u, 3 * u, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = cor; ctx.beginPath(); ctx.arc(cx + 6 * u, cy + 6 * u, 5 * u, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 1.5 * u; ctx.strokeStyle = '#e4e6ec'; ctx.stroke();
+  } else if (id === 'traco') {                                // lápis inclinado; com a caneta ligada, a ponta sai na cor atual
+    ctx.translate(cx, cy); ctx.rotate(-Math.PI / 4);
+    ctx.fillRect(-12 * u, -4.5 * u, 22 * u, 9 * u);
+    ctx.beginPath(); ctx.moveTo(11 * u, -4.5 * u); ctx.lineTo(18 * u, 0); ctx.lineTo(11 * u, 4.5 * u); ctx.closePath();
+    ctx.fillStyle = canetaAtiva ? cor : '#111111'; ctx.fill();
+    ctx.fillStyle = '#e4e6ec'; ctx.fillRect(4 * u, -4.5 * u, 2 * u, 9 * u);
+  } else if (id === 'formas') {                               // triângulo vazado
+    ctx.lineWidth = 2.6 * u; ctx.beginPath(); ctx.moveTo(cx, cy - 14 * u); ctx.lineTo(cx + 16 * u, cy + 13 * u); ctx.lineTo(cx - 16 * u, cy + 13 * u); ctx.closePath(); ctx.stroke();
+  } else if (id === 'lousa') {                                // duas folhas empilhadas
+    retArred(cx - 12 * u, cy - 12 * u, 26 * u, 19 * u, 3 * u); ctx.lineWidth = 2.6 * u; ctx.stroke();
+    retArred(cx - 16 * u, cy - 6 * u, 28 * u, 20 * u, 3 * u); ctx.fill();
+  } else if (id === 'recolher' || id === 'expandir') {        // seta < ou >
+    const s = id === 'recolher' ? 1 : -1;
+    ctx.lineWidth = 3.2 * u; ctx.beginPath(); ctx.moveTo(cx + 5 * u * s, cy - 11 * u); ctx.lineTo(cx - 5 * u * s, cy); ctx.lineTo(cx + 5 * u * s, cy + 11 * u); ctx.stroke();
   }
   ctx.restore();
+}
+
+function desenharBotao(b, agora, sobre) {
+  const selecionado = (b.tipo === 'cor' && b.valor === cor) || (b.tipo === 'tam' && b.valor === tam) || (b.tipo === 'camera' && cameraVisivel) || (b.tipo === 'caneta' && canetaAtiva);
+  const piscando = (piscaPor.get(idDe(b)) || 0) > agora;
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  retArred(b.x, b.y, b.w, b.h, 8 * K);
+  ctx.fillStyle = b.tipo === 'cor' ? b.valor : (piscando ? '#b9c4ff' : '#ffffff');
+  ctx.fill();
+  ctx.fillStyle = '#111111'; ctx.font = '600 ' + Math.round(13 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (b.tipo === 'tam') { ctx.beginPath(); ctx.arc(cx, cy, b.valor / 2 + 1, 0, Math.PI * 2); ctx.fill(); }
+  else if (b.tipo === 'forma') { caminhoForma(b.valor, cx, cy, 0.17 * K); ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke(); }
+  else if (b.tipo !== 'cor') ctx.fillText({ limpar: 'Limpar', camera: 'Câmera', caneta: 'Caneta e borracha: ' + (canetaAtiva ? 'ligadas' : 'desligadas'), ant: '◀  Slide anterior', prox: 'Próximo slide  ▶' }[b.tipo], cx, cy);
+  retArred(b.x, b.y, b.w, b.h, 8 * K);
+  if (selecionado) { ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 4; }
+  else if (sobre.has(idDe(b))) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 3; }
+  else { ctx.strokeStyle = '#b4b8c4'; ctx.lineWidth = 2; }
+  ctx.stroke();
+  if (selecionado && b.tipo === 'cor') { retArred(b.x + 4, b.y + 4, b.w - 8, b.h - 8, 5); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
+}
+
+function desenharInterface(agora, sobre) {
+  for (const r of montarInterface()) {
+    if (r.tipo === 'barra') {
+      ctx.fillStyle = '#dfe1e6'; ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = '#c4c8d2'; ctx.fillRect(r.x + r.w - 1.5, r.y, 1.5, r.h);
+    } else if (r.tipo === 'expandir') {                       // aba que sobra com o menu recolhido
+      retArred(r.x - 10 * K, r.y, r.w + 10 * K, r.h, 10 * K); ctx.fillStyle = '#dfe1e6'; ctx.fill(); ctx.strokeStyle = sobre.has(idDe(r)) ? '#111111' : '#c4c8d2'; ctx.lineWidth = 2; ctx.stroke();
+      icone('expandir', r.x + (r.w - 26 * K) / 2, r.y + (r.h - 26 * K) / 2, 26 * K);
+    } else if (r.tipo === 'menu' || r.tipo === 'recolher') {
+      const aberto = r.tipo === 'menu' && painelAberto === r.valor;
+      if (aberto || sobre.has(idDe(r)) || (piscaPor.get(idDe(r)) || 0) > agora) {
+        retArred(r.x, r.y, r.w, r.h, 9 * K); ctx.fillStyle = aberto ? '#c9d3ff' : '#ffffff'; ctx.fill();
+        if (sobre.has(idDe(r))) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.stroke(); }
+      }
+      icone(r.tipo === 'menu' ? r.valor : 'recolher', r.x, r.y, r.w);
+    } else if (r.tipo === 'painel') {
+      retArred(r.x, r.y, r.w, r.h, 12 * K); ctx.fillStyle = '#e4e6ec'; ctx.fill(); ctx.strokeStyle = '#c4c8d2'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#4a5060'; ctx.font = '600 ' + Math.round(13 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(r.titulo + (r.titulo === 'Lousa' && paginaAtual >= 0 ? '  ·  slide ' + (paginaAtual + 1) + ' de ' + paginas.length : ''), r.x + 10 * K, r.y + 26 * K);
+    } else desenharBotao(r, agora, sobre);
+  }
 }
 
 function anel(x, y, r) {
@@ -1749,47 +1675,67 @@ function anel(x, y, r) {
 }
 function bolinha(p, r, corFundo) { ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, Math.PI * 2); ctx.fillStyle = corFundo; ctx.fill(); }
 
-const apontando = m => m.lm && m.dedos && m.ponta && !m.travada && !m.pinca && !m.redim && m.dedos.slice(1).join('') === '1000';
+// Anel de espera, fino e branco: trilho translúcido e um arco que se completa no tempo da espera
+function anelDeEspera(c, r, fracao) {
+  ctx.save(); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, Math.PI * 2); ctx.lineWidth = 4 * K; ctx.strokeStyle = 'rgba(15,18,26,0.5)'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(c[0], c[1], r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, fracao)); ctx.lineWidth = 3 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  ctx.restore();
+}
 
-function desenharCursor(m) {
+// Ícones do menu da mão: só o contorno, em branco
+function iconeContorno(id, cx, cy, l) {
+  const u = l / 44;
+  ctx.save();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.4 * u; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 3 * u;          // leve sombra para o branco não sumir em fundo claro
+  ctx.beginPath();
+  if (id === 'cores') {                         // paleta com furos
+    ctx.ellipse(cx, cy, 17 * u, 14 * u, 0, 0, Math.PI * 2);
+    for (const [dx, dy] of [[-8, -5], [0, -8], [8, -5], [-10, 4]]) { ctx.moveTo(cx + dx * u + 3 * u, cy + dy * u); ctx.arc(cx + dx * u, cy + dy * u, 3 * u, 0, Math.PI * 2); }
+    ctx.moveTo(cx + 11 * u, cy + 6 * u); ctx.arc(cx + 6 * u, cy + 6 * u, 5 * u, 0, Math.PI * 2);
+  } else if (id === 'traco') {                  // lápis inclinado
+    ctx.translate(cx, cy); ctx.rotate(-Math.PI / 4);
+    ctx.rect(-14 * u, -5 * u, 22 * u, 10 * u);
+    ctx.moveTo(8 * u, -5 * u); ctx.lineTo(17 * u, 0); ctx.lineTo(8 * u, 5 * u);
+    ctx.moveTo(-8 * u, -5 * u); ctx.lineTo(-8 * u, 5 * u);
+  } else if (id === 'formas') {                 // triângulo
+    ctx.moveTo(cx, cy - 14 * u); ctx.lineTo(cx + 16 * u, cy + 13 * u); ctx.lineTo(cx - 16 * u, cy + 13 * u); ctx.closePath();
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function desenharMenuDaMao(agora) {
+  for (const m of maos) if (m.lm && m.abrirDesde && !radial) anelDeEspera(m.medidas.centro, 16 * K, (agora - m.abrirDesde) / ESPERA_MENU);
+  if (!radial) return;
+  for (const o of opcoesRadiais()) {
+    // trapézio saindo do centro: base menor perto do centro, base maior para fora; cor a 50% de transparência
+    const d1 = o.R - o.r * 1.05, d2 = o.R + o.r * 1.05, m1 = o.r * 0.5, m2 = o.r * 1.15;
+    ctx.save(); ctx.translate(radial.c[0], radial.c[1]); ctx.rotate(o.angulo * Math.PI / 180);
+    ctx.beginPath(); ctx.moveTo(d1, -m1); ctx.lineTo(d2, -m2); ctx.lineTo(d2, m2); ctx.lineTo(d1, m1); ctx.closePath();
+    const mirando = radial.mira && radial.mira.id === o.id;
+    ctx.fillStyle = mirando ? 'rgba(31,95,224,0.5)' : 'rgba(15,18,26,0.5)'; ctx.fill();
+    ctx.restore();
+    iconeContorno(o.id, o.x, o.y, o.r * 1.1);
+    if (mirando) anelDeEspera([o.x, o.y], o.r * 0.85, (agora - radial.mira.desde) / ESPERA_OPCAO);
+  }
+  ctx.beginPath(); ctx.arc(radial.c[0], radial.c[1], 9 * K, 0, Math.PI * 2);           // marca do centro
+  ctx.lineWidth = 2.5 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+}
+
+// Referência visual de cada mão: os 21 pontos, discretos, e um anel na ponta do indicador
+function desenharMao(m) {
   const lm = m.lm;
-  if (!lm || !m.dedos || !m.ponta) return;
-  if (m.travada) {                              // sinal de travada: disco cinza com uma barra, sobre a palma
-    bolinha(lm[9], 13, '#8a8f9c');
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(lm[9][0] - 8, lm[9][1] - 2.5, 16, 5);
-    return;
-  }
-  if (m.pinca) {
-    anel(m.pontoPinca[0], m.pontoPinca[1], 12);
-    bolinha(m.pontoPinca, 7, m.agarrada ? '#1f5fe0' : '#8a8f9c');
-    return;
-  }
-  if (m.redim) {                                // linha entre polegar e indicador: é ela que dá o tamanho
-    ctx.beginPath(); ctx.moveTo(lm[4][0], lm[4][1]); ctx.lineTo(lm[8][0], lm[8][1]);
-    ctx.lineWidth = 3; ctx.strokeStyle = '#1f5fe0'; ctx.stroke();
-    bolinha(lm[4], 7, '#1f5fe0'); bolinha(lm[8], 7, '#1f5fe0');
-    return;
-  }
-  if (m.pontoGiro) {
-    anel(m.pontoGiro[0], m.pontoGiro[1], 12);
-    bolinha(m.pontoGiro, 7, m.giro && m.giro.forma ? '#1f5fe0' : '#8a8f9c');
-    return;
-  }
-  if (m.borracha) {
-    ctx.beginPath(); ctx.arc(m.borracha[0], m.borracha[1], RAIO_BORRACHA, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fill();
-    ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = '#111111'; ctx.stroke(); ctx.setLineDash([]);
-    return;
-  }
-  if (!apontando(m)) return;
-  const [x, y] = m.ponta;
-  anel(x, y, Math.max(tam / 2, 6) + 3);
-  if (canetaAtiva && m.dedos[0] === 0 && !noPainel(x, y)) bolinha(m.ponta, Math.max(tam / 2, 3), cor);    // ponto colorido = vai desenhar
+  if (!lm || !m.ponta) return;
+  for (const p of lm) { ctx.beginPath(); ctx.arc(p[0], p[1], 2.5 * K, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill(); }
+  anel(m.ponta[0], m.ponta[1], 8 * K);
+  if (canetaAtiva && m.dedos && m.dedos.join('') === '01000' && !noPainel(m.ponta[0], m.ponta[1])) bolinha(m.ponta, Math.max(tam / 2, 3), cor);   // vai desenhar
 }
 
 // ---------- redesenho econômico ----------
 // A lousa só é redesenhada quando algo mudou. E o que não muda de um quadro para o outro fica guardado em imagens prontas:
-//   - os traços e formas parados (tudo, menos o traço sendo desenhado e as formas presas a uma mão);
+//   - os traços e formas parados (tudo, menos o que estiver mudando: ver itensAtivos);
 //   - o painel de botões.
 let sujo = true;                    // há algo novo para desenhar
 let piscaAte = 0;                   // fim do realce do último botão clicado
@@ -1799,11 +1745,7 @@ function pedirDesenho() { sujo = true; }
 const telaItens = document.createElement('canvas'), telaPainel = document.createElement('canvas');
 let chaveItens = null, chavePainel = null, temItensParados = false;
 
-function itensAtivos() {            // o que está mudando agora, na ordem em que aparece na lousa
-  const s = new Set();
-  for (const m of maos) { if (m.tracoAtual) s.add(m.tracoAtual); if (m.agarrada) s.add(m.agarrada); if (m.giro && m.giro.forma) s.add(m.giro.forma); if (m.redim && m.redim.forma) s.add(m.redim.forma); }
-  return s.size ? itens.filter(i => s.has(i)) : [];
-}
+function itensAtivos() { const s = new Set(maos.map(m => m.tracoAtual).filter(Boolean)); return s.size ? itens.filter(i => s.has(i)) : []; }   // traços em andamento
 
 function guardarItensParados(ativos) {
   // a imagem guardada vale enquanto a lista de itens e o conjunto de itens ativos forem os mesmos
@@ -1820,24 +1762,26 @@ function guardarItensParados(ativos) {
   ctx = ctxTela;
 }
 
+// O menu e o painel aberto ficam guardados numa imagem, refeita só quando algo neles muda
 function guardarPainel(agora, sobre) {
-  const e = tela.width / W, margem = 4;
-  const piscando = botoes.map((b, i) => b.piscaAte && agora < b.piscaAte ? i : '').join('');
-  const chave = [cor, tam, cameraVisivel, canetaAtiva, PAINEL.k, PAINEL.x, PAINEL.y, e, botoes.map((b, i) => sobre.has(b) ? i : '').join(','), piscando].join('|');
-  const ox = Math.round((PAINEL.x - margem) * e), oy = Math.round((PAINEL.y - margem) * e);
+  const e = tela.width / W, partes = montarInterface();
+  const piscando = Array.from(piscaPor).filter(([, t]) => t > agora).map(([id]) => id).join(',');
+  const chave = [menuAberto, painelAberto, cor, tam, cameraVisivel, canetaAtiva, paginaAtual, paginas.length, W, H, e, Array.from(sobre).join(','), piscando].join('|');
   if (chave !== chavePainel) {
     chavePainel = chave;
-    const l = Math.ceil((PAINEL.w * PAINEL.k + margem * 2) * e) + 1, a = Math.ceil((PAINEL.h * PAINEL.k + margem * 2) * e) + 1;
+    const direita = Math.max(...partes.map(r => r.x + r.w)) + 4;
+    const l = Math.ceil(direita * e) + 1, a = tela.height;
     if (telaPainel.width !== l || telaPainel.height !== a) { telaPainel.width = l; telaPainel.height = a; }
     ctx = telaPainel.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, l, a);
-    ctx.setTransform(e, 0, 0, e, -ox, -oy);
-    desenharPainel(agora, sobre);
+    ctx.setTransform(e, 0, 0, tela.height / H, 0, 0);
+    desenharInterface(agora, sobre);
     ctx = ctxTela;
   }
-  return [ox, oy];
+  return [0, 0];
 }
 
+// Anel de espera: fundo claro e um arco escuro que se completa em 2 s
 function quadro() {
   requestAnimationFrame(quadro);
   if (video.readyState < 2) return;
@@ -1850,11 +1794,15 @@ function quadro() {
     try { res = detector.detectForVideo(fonteDeteccao(), agora); }
     catch (e) { res = { landmarks: [] }; socorro(); }
     const gasto = performance.now() - t0;
-    const emUso = delegado;
-    if (prova) registrarProva(gasto); else registrarTeste(gasto);
-    if (emUso === delegado) medir(gasto, agora);              // se o processador acabou de ser trocado, essa medida era do anterior
+    if (vigia && escolha !== 'manual') vigiar(gasto);        // à mão, o processador escolhido fica, mesmo lento
+    registrarTeste(gasto); medir(gasto, agora);
     const q = enquadre();                       // mesma conta que o navegador usa para exibir a câmera (preencher e cortar a sobra), espelhada
-    const deteccoes = (res.landmarks || []).map(mao => mao.map(p => [q.ox + (1 - p.x) * q.dw, q.oy + p.y * q.dh]));
+    const lados = res.handedness || res.handednesses || [];
+    const deteccoes = (res.landmarks || []).map((mao, i) => {
+      const lm = mao.map(p => [q.ox + (1 - p.x) * q.dw, q.oy + p.y * q.dh]);
+      lm.lado = lados[i] && lados[i][0] ? lados[i][0].categoryName : null;      // 'Left' ou 'Right', como o rastreador classifica
+      return lm;
+    });
     atribuirMaos(deteccoes, agora);
     if (leituraVisivel) {
       const linhas = maos.filter(m => m.lm).sort((a, b) => a.punho[0] - b.punho[0]).map((m, i) => 'mão ' + (i + 1) + ': ' + m.leitura);
@@ -1869,7 +1817,6 @@ function quadro() {
   const ativos = itensAtivos();
   guardarItensParados(ativos);
   const sobre = new Set();
-  for (const m of maos) if (apontando(m)) { const b = botaoEm(m.ponta[0], m.ponta[1]); if (b) sobre.add(b); }
   const [px, py] = guardarPainel(agora, sobre);
 
   ctx = ctxTela;
@@ -1883,7 +1830,9 @@ function quadro() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(telaPainel, px, py);
   ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
-  for (const m of maos) desenharCursor(m);
+  desenharMenuDaMao(agora);
+  for (const m of maos) desenharMao(m);
+  if (radial || maos.some(m => m.abrirDesde)) sujo = true;           // contagem ou menu na tela: continua redesenhando
 }
 
 // ---------- mouse, toque e teclado ----------
