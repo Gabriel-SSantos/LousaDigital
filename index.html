@@ -73,7 +73,8 @@
     <li><b>Zoom com as duas mãos:</b> pinça com as duas mãos na mesma imagem; afaste para aumentar e aproxime para diminuir, a partir do centro entre as pinças.</li>
     <li><b>Borracha:</b> com o lápis liberado, indicador e médio erguidos e colados, com a mesma regra do polegar; passe sobre o traço.</li>
     <li><b>Menu:</b> a barra da esquerda, com mouse ou toque. Paleta = cores, lápis = caneta e espessura, triângulo = formas, folhas = lousa e slides. A seta de baixo recolhe a barra.</li>
-    <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O quadro guarda no navegador uma cópia de cada imagem e .pptx enviado, com o caminho do arquivo, e reabre tudo ao recarregar, também no celular.</li>
+    <li><b>PDF:</b> envie pelo botão Enviar arquivo ou arraste para a janela; ele entra no carrossel como os slides. Cada página abre na largura da tela, a partir do topo: para descer, arraste a página com a pinça (ou com o mouse). O zoom é o mesmo do slide (duas pinças, bolinha azul ou rodinha), e o passador de slides avança ou volta uma página.</li>
+    <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx, um PDF ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O quadro guarda no navegador uma cópia de cada imagem, .pptx e PDF enviado, com o caminho do arquivo, e reabre tudo ao recarregar, também no celular.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
@@ -86,10 +87,10 @@
 
 <div id="recado" hidden></div>
 
-<!-- Módulo de upload: recebe .pptx e imagens e devolve páginas prontas para desenhar. Fica disponível como window.ModuloUpload. -->
+<!-- Módulo de upload: recebe .pptx, .pdf e imagens e devolve páginas prontas para desenhar. Fica disponível como window.ModuloUpload. -->
 <script>
 /*
- * Módulo de upload — recebe arquivos de imagem e de PowerPoint (.pptx) e devolve "páginas" prontas para desenhar.
+ * Módulo de upload — recebe arquivos de imagem, de PowerPoint (.pptx) e PDF e devolve "páginas" prontas para desenhar.
  *
  * Uso mínimo:
  *
@@ -100,7 +101,8 @@
  *     aoReceber: ({ paginas, recusados }) => { ... }
  *   });
  *
- * Cada página: { nome, origem: 'imagem' | 'pptx', arquivo, indice, largura, altura, imagem, avisos }
+ * Cada página: { nome, origem: 'imagem' | 'pptx' | 'pdf', arquivo, indice, largura, altura, imagem, avisos }
+ *   no PDF, a página só é desenhada no canvas ao chamar pagina.preparar() (devolve uma promessa)
  *   imagem  -> um <canvas>, que serve direto em ctx.drawImage(pagina.imagem, ...)
  *   avisos  -> lista de textos sobre o que não pôde ser desenhado naquele slide
  * Cada recusado: { nome, motivo }
@@ -119,11 +121,17 @@
   // ---------------------------------------------------------------------------------------------------------
   const URL_JSZIP = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';   // o .pptx é um arquivo zip
   const EXT_IMAGEM = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'];
-  const ACEITA = ['.pptx'].concat(EXT_IMAGEM.map(e => '.' + e)).join(',');
+  // leitor de PDF (pdf.js); a versão 3 ainda tem o arquivo .js comum, que entra com <script>
+  const URL_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  const URL_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const ACEITA = ['.pptx', '.pdf'].concat(EXT_IMAGEM.map(e => '.' + e)).join(',');
   const TAMANHO_MAXIMO = 80 * 1024 * 1024;      // 80 MB por arquivo
   const LADO_MAXIMO = 2560;                     // imagens maiores que isso são reduzidas, para poupar memória
   // largura, em pixels, em que cada slide é desenhado; menor em celular e tablet, para poupar memória
   const LARGURA_SLIDE = global.matchMedia && global.matchMedia('(pointer: coarse)').matches ? 1280 : 1600;
+  // largura em que cada página de PDF é desenhada: maior que a do slide, porque o PDF costuma ser lido com zoom
+  const LARGURA_PDF = global.matchMedia && global.matchMedia('(pointer: coarse)').matches ? 1400 : 2000;
+  const PAGINAS_PDF_NA_MEMORIA = 8;             // páginas de PDF desenhadas ao mesmo tempo; as outras são desenhadas de novo quando voltam
 
   const extensao = nome => (/\.([a-z0-9]+)$/i.exec(nome || '') || [, ''])[1].toLowerCase();
   const ordemNatural = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' }).compare;   // Slide2 antes de Slide10
@@ -131,6 +139,7 @@
   function tipoDe(arquivo) {
     const ext = extensao(arquivo.name);
     if (ext === 'pptx') return 'pptx';
+    if (ext === 'pdf') return 'pdf';
     if (EXT_IMAGEM.includes(ext)) return 'imagem';
     return null;
   }
@@ -141,10 +150,9 @@
     if (arquivo.size === 0) return 'Arquivo vazio.';
     if (ext === 'ppt' || ext === 'pps' || ext === 'ppsx' || ext === 'odp' || ext === 'key')
       return 'Formato .' + ext + ' não é aceito. Abra no PowerPoint e salve como .pptx.';
-    if (ext === 'pdf') return 'PDF não é aceito. Envie o .pptx ou exporte as páginas como imagens.';
     if (ext === 'heic' || ext === 'heif' || ext === 'tif' || ext === 'tiff')
       return 'Imagem .' + ext + ' não abre no navegador. Converta para PNG ou JPG.';
-    if (!tipoDe(arquivo)) return 'Tipo de arquivo não aceito. Envie .pptx ou imagem (' + EXT_IMAGEM.join(', ') + ').';
+    if (!tipoDe(arquivo)) return 'Tipo de arquivo não aceito. Envie .pptx, .pdf ou imagem (' + EXT_IMAGEM.join(', ') + ').';
     return null;
   }
 
@@ -838,6 +846,74 @@
   }
 
   // ---------------------------------------------------------------------------------------------------------
+  // PDF
+  // ---------------------------------------------------------------------------------------------------------
+  // Cada página do PDF vira uma página como as dos slides. Para não gastar memória com PDFs longos, só a primeira
+  // página é desenhada na hora; as outras são desenhadas quando aparecem (pagina.preparar()), e as que ficaram
+  // longe são descartadas e desenhadas de novo se voltarem.
+  let promessaPdfjs = null;
+  function carregarPdfjs() {
+    if (global.pdfjsLib) return Promise.resolve(global.pdfjsLib);
+    if (!promessaPdfjs) promessaPdfjs = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = URL_PDFJS;
+      s.onload = () => { global.pdfjsLib.GlobalWorkerOptions.workerSrc = URL_PDFJS_WORKER; resolve(global.pdfjsLib); };
+      s.onerror = () => { promessaPdfjs = null; reject(new Error('Não consegui baixar o leitor de PDF. Verifique a internet.')); };
+      document.head.appendChild(s);
+    });
+    return promessaPdfjs;
+  }
+
+  const pdfsDesenhados = [];                    // páginas de PDF com o desenho na memória, da mais antiga para a mais recente
+
+  async function lerPdf(arquivo, aoProgresso) {
+    const pdfjs = await carregarPdfjs();
+    let doc;
+    try { doc = await pdfjs.getDocument({ data: new Uint8Array(await arquivo.arrayBuffer()) }).promise; }
+    catch (e) {
+      if (e && e.name === 'PasswordException') throw new Error('O PDF está protegido por senha.');
+      throw new Error('Não é um PDF válido. O arquivo pode estar corrompido.');
+    }
+    if (!doc.numPages) throw new Error('O PDF não tem páginas.');
+    const paginas = [];
+    for (let i = 0; i < doc.numPages; i++) {
+      if (aoProgresso) aoProgresso(arquivo.name + ': página ' + (i + 1) + ' de ' + doc.numPages);
+      const pagPdf = await doc.getPage(i + 1), base = pagPdf.getViewport({ scale: 1 });
+      const escala = LARGURA_PDF / base.width, vp = pagPdf.getViewport({ scale: escala });
+      const canvas = novoCanvas(1, 1);                 // ganha o tamanho certo ao ser desenhada
+      const pg = { nome: arquivo.name + ' · página ' + (i + 1), origem: 'pdf', arquivo: arquivo.name, indice: i, largura: Math.round(vp.width), altura: Math.round(vp.height), imagem: canvas, avisos: [] };
+      let desenhando = null;
+      pg.preparar = () => {
+        const j = pdfsDesenhados.indexOf(pg);
+        if (j >= 0) { pdfsDesenhados.splice(j, 1); pdfsDesenhados.push(pg); }
+        if (desenhando) return desenhando;
+        desenhando = (async () => {
+          const c = novoCanvas(pg.largura, pg.altura), g = c.getContext('2d');
+          g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);   // PDF sem fundo fica branco, como no papel
+          try { await pagPdf.render({ canvasContext: g, viewport: vp }).promise; }
+          catch (e) { desenhando = null; throw e; }
+          canvas.width = c.width; canvas.height = c.height;      // o mesmo <canvas> continua na tela; só recebe o desenho
+          canvas.getContext('2d').drawImage(c, 0, 0);
+          c.width = c.height = 0;
+          if (pg.indice === 0) return;                    // a primeira página fica sempre: é a miniatura do carrossel
+          pdfsDesenhados.push(pg);
+          for (let k = 0; pdfsDesenhados.length > PAGINAS_PDF_NA_MEMORIA && k < pdfsDesenhados.length;) {
+            const velha = pdfsDesenhados[k];
+            if (velha.imagem.isConnected) { k++; continue; }   // a que está na tela não sai
+            pdfsDesenhados.splice(k, 1); velha.descartar();
+          }
+        })();
+        return desenhando;
+      };
+      pg.descartar = () => { desenhando = null; canvas.width = canvas.height = 1; };
+      pg.desenhada = () => canvas.width > 1;
+      paginas.push(pg);
+    }
+    await paginas[0].preparar();                      // a primeira página serve de miniatura no carrossel
+    return paginas;
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
   // Interface pública
   // ---------------------------------------------------------------------------------------------------------
 
@@ -854,7 +930,8 @@
       if (motivo) { recusados.push({ nome: arq.name, motivo }); continue; }
       try {
         if (aoProgresso) aoProgresso('Lendo ' + arq.name + '…');
-        const lidas = tipoDe(arq) === 'imagem' ? [await lerImagem(arq)] : await lerPptx(arq, aoProgresso);
+        const tipo = tipoDe(arq);
+        const lidas = tipo === 'imagem' ? [await lerImagem(arq)] : tipo === 'pdf' ? await lerPdf(arq, aoProgresso) : await lerPptx(arq, aoProgresso);
         const caminho = caminhoDe(arq);
         for (const p of lidas) { p.caminho = caminho; p.fonte = arq; }   // fonte: o arquivo original, para guardar como anexo
         paginas.push(...lidas);
@@ -1253,6 +1330,10 @@ function aplicarCamadas() {
   camada.style.opacity = OPACIDADE_PAGINA;
   if (pg) { if (camada.firstChild !== pg.imagem) camada.replaceChildren(pg.imagem); }
   else camada.replaceChildren();
+  if (pg && pg.preparar) {                         // PDF: desenha a página aberta e já adianta a anterior e a próxima
+    pg.preparar().catch(() => recado('Não consegui desenhar a página ' + (paginaAtual + 1) + ' do PDF.', 4000));
+    for (const viz of [paginas[paginaAtual + 1], paginas[paginaAtual - 1]]) if (viz && viz.preparar) viz.preparar().catch(() => {});
+  }
   aplicarVistaSlide();
 }
 
@@ -1262,6 +1343,10 @@ function aplicarCamadas() {
 // a partir do centro entre elas. Com o mouse: arrastar move e a rodinha faz zoom.
 const vistas = new Map();           // página -> { tipo: 'slide', x, y, w, h }
 function vistaInicial(pg) {
+  if (pg.origem === 'pdf') {                       // PDF: ocupa a largura da tela e começa no topo; arraste para descer
+    const e = W / pg.largura, w = W, h = pg.altura * e;
+    return { tipo: 'slide', x: 0, y: h <= H ? (H - h) / 2 : 0, w, h };
+  }
   const e = Math.min(W / pg.largura, H / pg.altura), w = pg.largura * e, h = pg.altura * e;
   return { tipo: 'slide', x: (W - w) / 2, y: (H - h) / 2, w, h };
 }
@@ -1982,11 +2067,12 @@ function processarPassador(m, agora) {
   if (!m.passadorDesde) m.passadorDesde = agora;
   if (!m.passadorFeito && agora - m.passadorDesde >= ESPERA_PASSADOR) {
     m.passadorFeito = true;                     // passa um slide por sinal; para passar outro, desfaça e refaça o sinal
-    if (paginaAtual < 0) recado('Nenhum slide aberto. Envie um .pptx ou imagens pelo botão Enviar arquivo.', 3000);
+    if (paginaAtual < 0) recado('Nenhum slide aberto. Envie um .pptx, um PDF ou imagens pelo botão Enviar arquivo.', 3000);
     else {
       const antes = paginaAtual;
       irParaPagina(paginaAtual + sentido);
-      if (paginaAtual === antes) recado(sentido > 0 ? 'Este é o último slide.' : 'Este é o primeiro slide.', 1800);
+      const pdf = paginas[paginaAtual] && paginas[paginaAtual].origem === 'pdf';
+      if (paginaAtual === antes) recado(sentido > 0 ? (pdf ? 'Esta é a última página.' : 'Este é o último slide.') : (pdf ? 'Esta é a primeira página.' : 'Este é o primeiro slide.'), 1800);
     }
   }
   return true;
@@ -2264,10 +2350,11 @@ function desenharInterface(agora, sobre) {
         ctx.save(); retArred(r.x, r.y, r.w, r.h, 8 * K); ctx.clip();
         ctx.fillStyle = 'rgba(15,18,26,0.78)'; ctx.fillRect(r.x, r.y + r.h - fx, r.w, fx);
         ctx.fillStyle = '#ffffff'; ctx.font = '600 ' + Math.round(11 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        let rot = ent.a.nome.replace(/\.pptx$/i, '');
-        const fim = '  ·  ' + ent.a.paginas.length + (ent.a.paginas.length === 1 ? ' slide' : ' slides');
+        let rot = ent.a.nome.replace(/\.(pptx|pdf)$/i, '');
+        const ehPdf = ent.a.paginas[0] && ent.a.paginas[0].origem === 'pdf', un = ehPdf ? ['página', 'páginas'] : ['slide', 'slides'];
+        const fim = '  ·  ' + ent.a.paginas.length + ' ' + (ent.a.paginas.length === 1 ? un[0] : un[1]);
         while (rot.length > 1 && ctx.measureText(rot + '…' + fim).width > r.w - 12 * K) rot = rot.slice(0, -1);
-        ctx.fillText((rot === ent.a.nome.replace(/\.pptx$/i, '') ? rot : rot + '…') + fim, r.x + 6 * K, r.y + r.h - fx / 2);
+        ctx.fillText((rot === ent.a.nome.replace(/\.(pptx|pdf)$/i, '') ? rot : rot + '…') + fim, r.x + 6 * K, r.y + r.h - fx / 2);
         ctx.restore();
       }
       retArred(r.x, r.y, r.w, r.h, 8 * K); ctx.strokeStyle = sob ? '#1f5fe0' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = sob ? 4 * K : 2; ctx.stroke();
