@@ -15,7 +15,7 @@
   .stage { position: fixed; inset: 0; background: #fbfbf8; overflow: hidden; }
   #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); pointer-events: none; }
   #camadaPagina { position: absolute; inset: 0; pointer-events: none; }
-  #camadaPagina canvas { position: absolute; width: auto; height: auto; }   /* posição e tamanho vêm do zoom do slide (aplicarVistaSlide) */
+  #camadaPagina > canvas, #camadaPagina > .docPdf { position: absolute; width: auto; height: auto; }   /* posição e tamanho vêm do zoom do slide (aplicarVistaSlide) */
   #tela { position: absolute; inset: 0; }
   /* A lousa ocupa a janela inteira, em qualquer formato: deitada, em pé, celular ou computador */
   canvas { display: block; width: 100%; height: 100%; touch-action: none; }
@@ -31,6 +31,22 @@
   #recado { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); max-width: min(520px, calc(100vw - 20px)); box-sizing: border-box;
             background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 10px 14px; line-height: 1.45; white-space: pre-line; }
   #recado[hidden] { display: none; }
+  /* quem assiste pela rede: sem botões de controle, só o selo "assistindo", o contador de páginas e Tela cheia */
+  body.assistindo .barra > :not(#aoVivo):not(#contador):not(#btCheia) { display: none !important; }
+  #aoVivo { display: inline-flex; align-items: center; gap: 6px; }
+  #aoVivo[hidden] { display: none; }
+  #aoVivo::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #e5202b; }
+  #aoVivo.parado::before { background: #8a8f9c; }
+  /* QR Code para os outros aparelhos abrirem o endereço de assistir */
+  #qr { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, 0.72); }
+  #qr[hidden], #qr [hidden] { display: none !important; }
+  #qr .cartao { background: #ffffff; color: #111111; border-radius: 10px; padding: 20px; max-width: min(440px, 100%); box-sizing: border-box; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  #qr canvas { width: min(340px, 70vw, 60vh); height: auto; aspect-ratio: 1; image-rendering: pixelated; }
+  #qr .endereco { font: 600 1.15rem ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+  #qr .outros { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  #qr .outros button { background: #eef0f5; color: #111111; font-weight: 500; font-size: 0.85rem; padding: 6px 10px; }
+  #qr .outros button.atual { background: #1f5fe0; color: #ffffff; }
+  #qr .fechar { background: #111111; color: #ffffff; }
   #ajuda { position: fixed; top: calc(58px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: min(400px, calc(100vw - 20px)); max-height: calc(100vh - 70px); max-height: calc(100dvh - 70px - env(safe-area-inset-top, 0px)); overflow-y: auto; box-sizing: border-box; background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 14px 16px; line-height: 1.55; }
   #ajuda ul { margin: 0 0 10px; padding-left: 18px; }
   #ajuda b { font-weight: 600; }
@@ -52,9 +68,12 @@
 </div>
 
 <div class="barra">
+  <span id="aoVivo" hidden></span>
+  <button id="btQr" type="button">Transmitir</button>
   <button id="btAnt" type="button" hidden aria-label="Página anterior">◀</button>
   <span id="contador" hidden>1 / 1</span>
   <button id="btProx" type="button" hidden aria-label="Próxima página">▶</button>
+  <button id="btBaixar" type="button" hidden>Baixar PDF anotado</button>
   <button id="btFechar" type="button" hidden>Fechar slides</button>
   <button id="btEnviar" type="button">Enviar arquivo</button>
   <button id="btAjuda" type="button">Ajuda</button>
@@ -71,10 +90,14 @@
     <li><b>Passador de slides:</b> só o mindinho erguido, com a mão inclinada para o mindinho apontar na diagonal para cima (entre 20° e 70°). Com a palma para a câmera, avança um slide; com as costas, volta um. Para passar outro, desfaça e refaça o sinal.</li>
     <li><b>Lixeira:</b> o botão abaixo de Tela cheia apaga tudo o que está na tela. Arrastar uma imagem até ela (a lixeira cresce e fica vermelha) e soltar apaga só essa imagem.</li>
     <li><b>Zoom com as duas mãos:</b> pinça com as duas mãos na mesma imagem; afaste para aumentar e aproxime para diminuir, a partir do centro entre as pinças.</li>
+    <li><b>Marca-texto:</b> painel do lápis (Caneta e traço), botão Marca-texto: o lápis passa a riscar largo e transparente, para destacar o texto (o amarelo fica no painel de cores). Clique de novo para voltar ao lápis comum. A borracha apaga os dois.</li>
+    <li><b>Desenhar com mouse, dedo ou caneta:</b> com um slide ou PDF aberto e o lápis (ou o marca-texto) ligado, arraste sobre a página para riscar; o botão direito do mouse apaga. Para rolar enquanto isso, use a rodinha ou dois dedos.</li>
+    <li><b>Anotações:</b> o que você desenha sobre um slide ou PDF fica preso à página: rola e muda de zoom junto com ela. Tudo (traços, marca-texto e formas, da lousa e de cada arquivo) fica guardado no navegador e volta ao recarregar. Com um PDF aberto, o botão Baixar PDF anotado gera uma cópia do PDF com as anotações.</li>
     <li><b>Borracha:</b> com o lápis liberado, indicador e médio erguidos e colados, com a mesma regra do polegar; passe sobre o traço.</li>
     <li><b>Menu:</b> a barra da esquerda, com mouse ou toque. Paleta = cores, lápis = caneta e espessura, triângulo = formas, folhas = lousa e slides. A seta de baixo recolhe a barra.</li>
-    <li><b>PDF:</b> envie pelo botão Enviar arquivo ou arraste para a janela; ele entra no carrossel como os slides. Cada página abre na largura da tela, a partir do topo: para descer, arraste a página com a pinça (ou com o mouse). O zoom é o mesmo do slide (duas pinças, bolinha azul ou rodinha), e o passador de slides avança ou volta uma página.</li>
+    <li><b>PDF:</b> envie pelo botão Enviar arquivo ou arraste para a janela; ele entra no carrossel como os slides e abre como num leitor de PDF: todas as páginas uma embaixo da outra, presas na largura da tela. Para rolar, arraste com a pinça (ou com o mouse), use a rodinha ou as setas ↑ ↓. O zoom é o mesmo do slide (duas pinças, bolinha azul ou Ctrl + rodinha), e o passador de slides, ◀ ▶ e as setas ← → pulam para a página seguinte ou anterior.</li>
     <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx, um PDF ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O quadro guarda no navegador uma cópia de cada imagem, .pptx e PDF enviado, com o caminho do arquivo, e reabre tudo ao recarregar, também no celular.</li>
+    <li><b>Transmitir para a rede:</b> clique em Transmitir: o servidor da rede liga sozinho (depois de rodar <code>./instalar.sh</code> uma vez; sem isso, rode <code>node servidor.js</code>) e o QR Code abre. Os outros aparelhos da mesma rede leem o QR Code (ou abrem o endereço com o IP que aparece no selo "Ao vivo") e acompanham o arquivo, a página, a rolagem, o zoom, as anotações e o seu indicador, sem poder mexer em nada.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
@@ -86,6 +109,24 @@
 </div>
 
 <div id="recado" hidden></div>
+
+<div id="qr" hidden role="dialog" aria-label="QR Code para assistir">
+  <div class="cartao">
+    <b id="qrTitulo">Aponte a câmera do celular para assistir</b>
+    <canvas id="qrDesenho" width="1" height="1"></canvas>
+    <span class="endereco" id="qrEndereco"></span>
+    <span id="qrDica" style="font-size: 0.85rem; color: #555b66">O aparelho precisa estar na mesma rede (Wi-Fi) que este computador.</span>
+    <div id="qrSemServidor" hidden style="text-align: left; line-height: 1.5">
+      <span id="qrSemServidorTexto"></span>
+      <ul id="qrPassos" style="margin: 8px 0 0; padding-left: 20px">
+        <li><b>Uma vez só:</b> no terminal, na pasta do quadro, rode <code style="background: #eef0f5; padding: 1px 5px; border-radius: 3px">./instalar.sh</code>. Daí em diante o botão Transmitir liga o servidor sozinho.</li>
+        <li><b>Ou agora, à mão:</b> rode <code style="background: #eef0f5; padding: 1px 5px; border-radius: 3px">node servidor.js</code> na pasta do quadro.</li>
+      </ul>
+    </div>
+    <div class="outros" id="qrOutros"></div>
+    <button class="fechar" id="qrFechar" type="button">Fechar</button>
+  </div>
+</div>
 
 <!-- Módulo de upload: recebe .pptx, .pdf e imagens e devolve páginas prontas para desenhar. Fica disponível como window.ModuloUpload. -->
 <script>
@@ -102,8 +143,10 @@
  *   });
  *
  * Cada página: { nome, origem: 'imagem' | 'pptx' | 'pdf', arquivo, indice, largura, altura, imagem, avisos }
- *   no PDF, a página só é desenhada no canvas ao chamar pagina.preparar() (devolve uma promessa)
  *   imagem  -> um <canvas>, que serve direto em ctx.drawImage(pagina.imagem, ...)
+ *   no PDF, o arquivo inteiro vira UMA página alta (todas as páginas empilhadas): imagem é um <div> com um <canvas>
+ *   por página, pagina.mostrar(f0, f1) desenha as que aparecem entre as frações f0 e f1 da altura, pagina.capa
+ *   ({ largura, altura, imagem }) é a miniatura, e pagina.folhas ({ y, h }) diz onde fica cada página
  *   avisos  -> lista de textos sobre o que não pôde ser desenhado naquele slide
  * Cada recusado: { nome, motivo }
  *
@@ -848,9 +891,10 @@
   // ---------------------------------------------------------------------------------------------------------
   // PDF
   // ---------------------------------------------------------------------------------------------------------
-  // Cada página do PDF vira uma página como as dos slides. Para não gastar memória com PDFs longos, só a primeira
-  // página é desenhada na hora; as outras são desenhadas quando aparecem (pagina.preparar()), e as que ficaram
-  // longe são descartadas e desenhadas de novo se voltarem.
+  // O PDF inteiro vira uma única "página" alta, como num leitor de PDF: todas as páginas empilhadas, uma embaixo da
+  // outra, com uma faixa cinza entre elas. A imagem é um <div> com um <canvas> por página. Para não gastar memória
+  // com PDFs longos, só as páginas que aparecem na tela (e as vizinhas) são desenhadas (pagina.mostrar());
+  // as que ficaram longe são descartadas e desenhadas de novo se voltarem.
   let promessaPdfjs = null;
   function carregarPdfjs() {
     if (global.pdfjsLib) return Promise.resolve(global.pdfjsLib);
@@ -865,6 +909,7 @@
   }
 
   const pdfsDesenhados = [];                    // páginas de PDF com o desenho na memória, da mais antiga para a mais recente
+  const VAO_PDF = Math.round(LARGURA_PDF * 0.012);   // faixa cinza entre uma página e outra
 
   async function lerPdf(arquivo, aoProgresso) {
     const pdfjs = await carregarPdfjs();
@@ -875,42 +920,78 @@
       throw new Error('Não é um PDF válido. O arquivo pode estar corrompido.');
     }
     if (!doc.numPages) throw new Error('O PDF não tem páginas.');
-    const paginas = [];
+    const folhas = [];                                 // { y, h } na medida do documento, mais o canvas de cada página
+    let y = 0;
     for (let i = 0; i < doc.numPages; i++) {
       if (aoProgresso) aoProgresso(arquivo.name + ': página ' + (i + 1) + ' de ' + doc.numPages);
       const pagPdf = await doc.getPage(i + 1), base = pagPdf.getViewport({ scale: 1 });
-      const escala = LARGURA_PDF / base.width, vp = pagPdf.getViewport({ scale: escala });
-      const canvas = novoCanvas(1, 1);                 // ganha o tamanho certo ao ser desenhada
-      const pg = { nome: arquivo.name + ' · página ' + (i + 1), origem: 'pdf', arquivo: arquivo.name, indice: i, largura: Math.round(vp.width), altura: Math.round(vp.height), imagem: canvas, avisos: [] };
-      let desenhando = null;
-      pg.preparar = () => {
-        const j = pdfsDesenhados.indexOf(pg);
-        if (j >= 0) { pdfsDesenhados.splice(j, 1); pdfsDesenhados.push(pg); }
-        if (desenhando) return desenhando;
-        desenhando = (async () => {
-          const c = novoCanvas(pg.largura, pg.altura), g = c.getContext('2d');
-          g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);   // PDF sem fundo fica branco, como no papel
-          try { await pagPdf.render({ canvasContext: g, viewport: vp }).promise; }
-          catch (e) { desenhando = null; throw e; }
-          canvas.width = c.width; canvas.height = c.height;      // o mesmo <canvas> continua na tela; só recebe o desenho
-          canvas.getContext('2d').drawImage(c, 0, 0);
-          c.width = c.height = 0;
-          if (pg.indice === 0) return;                    // a primeira página fica sempre: é a miniatura do carrossel
-          pdfsDesenhados.push(pg);
-          for (let k = 0; pdfsDesenhados.length > PAGINAS_PDF_NA_MEMORIA && k < pdfsDesenhados.length;) {
-            const velha = pdfsDesenhados[k];
-            if (velha.imagem.isConnected) { k++; continue; }   // a que está na tela não sai
-            pdfsDesenhados.splice(k, 1); velha.descartar();
-          }
-        })();
-        return desenhando;
-      };
-      pg.descartar = () => { desenhando = null; canvas.width = canvas.height = 1; };
-      pg.desenhada = () => canvas.width > 1;
-      paginas.push(pg);
+      const vp = pagPdf.getViewport({ scale: LARGURA_PDF / base.width });
+      const h = Math.round(vp.height);
+      folhas.push({ indice: i, pagPdf, vp, y, h, pw: base.width, ph: base.height, canvas: novoCanvas(1, 1), desenhando: null, visivel: false });
+      y += h + VAO_PDF;
     }
-    await paginas[0].preparar();                      // a primeira página serve de miniatura no carrossel
-    return paginas;
+    const altura = y - VAO_PDF;
+    const caixa = document.createElement('div');
+    caixa.className = 'docPdf';
+    Object.assign(caixa.style, { position: 'absolute', background: '#5f636b', overflow: 'hidden' });
+    for (const f of folhas) {
+      Object.assign(f.canvas.style, { position: 'absolute', left: '0', width: '100%', background: '#ffffff',
+        top: (f.y / altura * 100) + '%', height: (f.h / altura * 100) + '%' });
+      caixa.appendChild(f.canvas);
+    }
+
+    function desenhar(f) {
+      const j = pdfsDesenhados.indexOf(f);
+      if (j >= 0) { pdfsDesenhados.splice(j, 1); pdfsDesenhados.push(f); }
+      if (f.desenhando) return f.desenhando;
+      const vez = f.desenhando = (async () => {
+        const c = novoCanvas(LARGURA_PDF, f.h), g = c.getContext('2d');
+        g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);   // PDF sem fundo fica branco, como no papel
+        try { await f.pagPdf.render({ canvasContext: g, viewport: f.vp }).promise; }
+        catch (e) { if (f.desenhando === vez) f.desenhando = null; throw e; }
+        if (f.desenhando !== vez) { c.width = c.height = 0; return; }   // foi descartada enquanto desenhava
+        f.canvas.width = c.width; f.canvas.height = c.height;
+        f.canvas.getContext('2d').drawImage(c, 0, 0);
+        c.width = c.height = 0;
+        if (!pdfsDesenhados.includes(f)) pdfsDesenhados.push(f);
+        for (let k = 0; pdfsDesenhados.length > PAGINAS_PDF_NA_MEMORIA && k < pdfsDesenhados.length;) {
+          const velha = pdfsDesenhados[k];
+          if (velha.visivel && velha.canvas.isConnected) { k++; continue; }   // as que estão na tela não saem
+          pdfsDesenhados.splice(k, 1); velha.desenhando = null; velha.canvas.width = velha.canvas.height = 1;
+        }
+      })();
+      return vez;
+    }
+
+    // capa: a primeira página, pequena, para a miniatura do carrossel
+    const capa = { largura: folhas[0].vp.width, altura: folhas[0].vp.height, imagem: null };
+    {
+      const vp = folhas[0].pagPdf.getViewport({ scale: 360 / folhas[0].pagPdf.getViewport({ scale: 1 }).width });
+      const c = novoCanvas(vp.width, vp.height), g = c.getContext('2d');
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+      try { await folhas[0].pagPdf.render({ canvasContext: g, viewport: vp }).promise; } catch (e) { /* miniatura em branco */ }
+      capa.imagem = c;
+    }
+
+    const pg = { nome: arquivo.name, origem: 'pdf', arquivo: arquivo.name, indice: 0, largura: LARGURA_PDF, altura, imagem: caixa, avisos: [], capa, original: arquivo,
+      numPaginas: folhas.length, folhas: folhas.map(f => ({ y: f.y, h: f.h, pw: f.pw, ph: f.ph })) };
+    // Desenha a página i num canvas novo, do tamanho em que aparece no documento (para gerar o PDF anotado)
+    pg.renderizar = async i => {
+      const f = folhas[i], c = novoCanvas(LARGURA_PDF, f.h), g = c.getContext('2d');
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+      await f.pagPdf.render({ canvasContext: g, viewport: f.vp }).promise;
+      return c;
+    };
+    // Desenha as páginas que aparecem entre as frações f0 e f1 da altura do documento, e uma tela a mais acima e abaixo
+    pg.mostrar = (f0, f1) => {
+      const a = f0 * altura, b = f1 * altura, folga = b - a;
+      for (const f of folhas) {
+        f.visivel = f.y + f.h >= a && f.y <= b;
+        if (f.y + f.h >= a - folga && f.y <= b + folga && f.canvas.width <= 1) desenhar(f).catch(() => {});
+        else if (f.visivel) desenhar(f).catch(() => {});      // já desenhada: só fica como a mais recente
+      }
+    };
+    return [pg];
   }
 
   // ---------------------------------------------------------------------------------------------------------
@@ -999,11 +1080,16 @@ const tela = document.getElementById('tela');
 const ctxTela = tela.getContext('2d');
 let ctx = ctxTela;                  // as funções de desenho usam `ctx`; ele aponta para a lousa ou para uma das imagens guardadas (ver quadro)
 const el = id => document.getElementById(id);
+// Pelo servidor da rede (servidor.js), quem abre pelo IP da rede só assiste; quem abre neste computador (localhost) apresenta.
+// ?assistir ou ?apresentar no endereço forçam um ou outro.
+const PARAMETROS = new URLSearchParams(location.search);
+const PELO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
+const ASSISTIR = PELO_SERVIDOR && (PARAMETROS.has('assistir') || (!PARAMETROS.has('apresentar') && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)));
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const meio = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 
 // ---------- estado da lousa ----------
-const CORES = ['#111111', '#e5202b', '#1f5fe0', '#1a9d4b', '#f08a00', '#8a3fd1'];
+const CORES = ['#111111', '#e5202b', '#1f5fe0', '#1a9d4b', '#f08a00', '#8a3fd1', '#ffd400', '#ff4fb4', '#22c7e8'];
 const TAMANHOS = [4, 8, 14, 24];
 const FORMAS = ['quadrado', 'retangulo', 'circulo', 'triangulo'];
 const MEIA = { quadrado: [80, 80], retangulo: [120, 70], circulo: [80, 80], triangulo: [95, 82] };  // meia largura, meia altura
@@ -1011,7 +1097,10 @@ let cor = CORES[0];
 let tam = TAMANHOS[1];
 let cameraVisivel = true;
 let canetaAtiva = false;            // caneta e borracha: começam desligadas; ligam pelo botão do painel
-let itens = [];                     // traços {tipo:'traco', cor, tam, pontos} e formas {tipo, x, y, cor, tam, rot, esc}
+let marcador = false;               // marca-texto: o lápis passa a riscar largo e transparente, por cima do texto
+const ALFA_MARCADOR = 0.38;
+const larguraMarcador = t => Math.max(18, t * 2.6);
+let itens = [];                     // traços {tipo:'traco', cor, tam, pontos, marca?} e formas {tipo, x, y, cor, tam, rot, esc}
 let novasFormas = 0;
 let maos = [];                      // uma entrada por mão acompanhada (até duas)
 
@@ -1031,7 +1120,7 @@ let painelAberto = null;            // id do item do menu cujo painel está aber
 // Conteúdo de cada painel: botões numa grade (col, lin, quantas colunas ocupa)
 function conteudoDoPainel(id) {
   if (id === 'cores') return { colunas: 3, botoes: CORES.map((c, i) => ({ tipo: 'cor', valor: c, col: i % 3, lin: Math.floor(i / 3), vao: 1 })) };
-  if (id === 'traco') return { colunas: 4, botoes: [{ tipo: 'caneta', col: 0, lin: 0, vao: 4 }].concat(TAMANHOS.map((t, i) => ({ tipo: 'tam', valor: t, col: i, lin: 1, vao: 1 }))) };
+  if (id === 'traco') return { colunas: 4, botoes: [{ tipo: 'caneta', col: 0, lin: 0, vao: 4 }].concat(TAMANHOS.map((t, i) => ({ tipo: 'tam', valor: t, col: i, lin: 1, vao: 1 })), [{ tipo: 'marcador', col: 0, lin: 2, vao: 4 }]) };
   if (id === 'formas') return { colunas: 4, botoes: FORMAS.map((f, i) => ({ tipo: 'forma', valor: f, col: i, lin: 0, vao: 1 })) };
   if (id === 'imagens') return { colunas: 4, botoes: [{ tipo: 'importar', col: 0, lin: 0, vao: 4 }, { tipo: 'galeria', col: 0, lin: 1, vao: 4 }] };
   const b = [{ tipo: 'limpar', col: 0, lin: 0, vao: 2 }, { tipo: 'camera', col: 2, lin: 0, vao: 2 }];
@@ -1042,6 +1131,7 @@ function conteudoDoPainel(id) {
 // Tudo o que o menu ocupa na lousa, em coordenadas lógicas. Os itens com `tipo` de botão respondem ao clique.
 function montarInterface() {
   const r = [], B = 56 * K, lado = 44 * K;
+  if (ASSISTIR) return r;                                         // quem assiste não tem menu nem botões
   // lixeira no canto de cima à direita, logo abaixo dos botões Enviar arquivo, Ajuda e Tela cheia (que ficam no HTML)
   const css = W / (tela.clientWidth || W), baseBotoes = (el('btEnviar').getBoundingClientRect().bottom || 44) * css;
   r.push({ tipo: 'lixeira', x: W - lado - 10 * css, y: baseBotoes + 10 * css, w: lado, h: lado });
@@ -1076,7 +1166,7 @@ function botaoEm(x, y) {            // o elemento clicável sob o ponto; o fundo
 }
 
 // Troca o conjunto de desenhos em uso; as mãos largam o que seguravam do conjunto anterior
-function trocarItens(novos) { itens = novos; for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.agarrada = null; } arrastePonteiro = null; pedirDesenho(); }
+function trocarItens(novos) { itens = novos; for (const m of maos) { m.tracoAtual = null; m.pendentes = []; m.agarrada = null; } arrastePonteiro = null; tracoPonteiro = null; panPonteiro = null; pedirDesenho(); }
 
 // ---------- imagens importadas, carrossel e imagem aberta ----------
 // Medidas na lousa (lado menor da tela = 720): numa tela 1280×720 são pixels de verdade; no celular encolhem na mesma proporção.
@@ -1111,16 +1201,23 @@ function adicionarNaGaleria(lista) {
   chavePainel = null; pedirDesenho();
 }
 function adicionarApresentacao(caminho, pgs) {
+  const a0 = pgs[0] && (pgs[0].original || pgs[0].fonte);     // antes de guardarAnexo, que solta a referência
   if (pgs[0]) guardarAnexo(pgs[0]);
-  const a = { nome: caminho.split('/').pop(), caminho, paginas: pgs };
+  const a = { nome: caminho.split('/').pop(), caminho, paginas: pgs, id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+              original: a0 };      // o arquivo, para mandar a quem assiste pela rede
   const i = apresentacoes.findIndex(x => x.caminho === caminho);
-  if (i >= 0) { if (paginas === apresentacoes[i].paginas) fecharPaginas(); apresentacoes[i] = a; } else apresentacoes.push(a);
+  if (i >= 0) {                                   // o mesmo arquivo de novo: as anotações da versão anterior passam para esta
+    if (paginas === apresentacoes[i].paginas) fecharPaginas();
+    if (anotacoesCarregadas) anotacoesSalvas = coletarAnotacoes();
+  }
+  aplicarAnotacoesSalvas(a);
+  if (i >= 0) apresentacoes[i] = a; else apresentacoes.push(a);
   chavePainel = null; pedirDesenho();
   return a;
 }
 // O carrossel mostra as imagens e, depois delas, as apresentações (com o primeiro slide como miniatura)
 function entradasDoCarrossel() {
-  return galeria.map(g => ({ tipo: 'imagem', g })).concat(apresentacoes.map(a => ({ tipo: 'slides', a, g: a.paginas[0] })));
+  return galeria.map(g => ({ tipo: 'imagem', g })).concat(apresentacoes.map(a => ({ tipo: 'slides', a, g: a.paginas[0].capa || a.paginas[0] })));
 }
 function abrirEntrada(i) {
   const e = entradasDoCarrossel()[i]; if (!e) return;
@@ -1328,7 +1425,7 @@ function aplicarCamadas() {
   video.style.visibility = cameraVisivel ? 'visible' : 'hidden';
   const camada = el('camadaPagina'), pg = paginas[paginaAtual];
   camada.style.opacity = OPACIDADE_PAGINA;
-  if (pg) { if (camada.firstChild !== pg.imagem) camada.replaceChildren(pg.imagem); }
+  if (pg) { if (camada.firstChild !== pg.imagem) { camada.replaceChildren(pg.imagem); estiloVista = ''; } }
   else camada.replaceChildren();
   if (pg && pg.preparar) {                         // PDF: desenha a página aberta e já adianta a anterior e a próxima
     pg.preparar().catch(() => recado('Não consegui desenhar a página ' + (paginaAtual + 1) + ' do PDF.', 4000));
@@ -1343,12 +1440,46 @@ function aplicarCamadas() {
 // a partir do centro entre elas. Com o mouse: arrastar move e a rodinha faz zoom.
 const vistas = new Map();           // página -> { tipo: 'slide', x, y, w, h }
 function vistaInicial(pg) {
-  if (pg.origem === 'pdf') {                       // PDF: ocupa a largura da tela e começa no topo; arraste para descer
+  if (pg.origem === 'pdf') {                       // PDF: ocupa a largura da tela e começa no topo; role para descer
     const e = W / pg.largura, w = W, h = pg.altura * e;
-    return { tipo: 'slide', x: 0, y: h <= H ? (H - h) / 2 : 0, w, h };
+    return prenderPdf({ tipo: 'slide', x: 0, y: 0, w, h, pdf: true });
   }
   const e = Math.min(W / pg.largura, H / pg.altura), w = pg.largura * e, h = pg.altura * e;
   return { tipo: 'slide', x: (W - w) / 2, y: (H - h) / 2, w, h };
+}
+// O PDF fica preso na tela, como num leitor: sem zoom, ocupa a largura e só rola na vertical; com zoom, rola nos
+// dois sentidos sem deixar sobrar fundo dos lados; menor que a tela, fica centralizado.
+function prenderPdf(v) {
+  if (!v.pdf) return v;
+  const minimo = W * 0.35;
+  if (v.w < minimo) { const f = minimo / v.w; v.x = v.x + (v.w - minimo) / 2; v.y = v.y + (v.h - v.h * f) / 2; v.w = minimo; v.h *= f; }
+  v.x = v.w <= W ? (W - v.w) / 2 : Math.min(0, Math.max(W - v.w, v.x));
+  v.y = v.h <= H ? (H - v.h) / 2 : Math.min(0, Math.max(H - v.h, v.y));
+  return v;
+}
+// Página do PDF que está no alto da tela (a que ocupa a linha um pouco abaixo do topo)
+function paginaDoPdf(pg, v) {
+  const y = Math.max(0, (H * 0.12 - v.y) / v.h * pg.altura);
+  let i = 0;
+  while (i < pg.folhas.length - 1 && pg.folhas[i + 1].y <= y) i++;
+  return i;
+}
+function rolarPdf(v, dy) { v.y -= dy; prenderPdf(v); pedirDesenho(); }
+// Avança ou volta uma página (no PDF, rola até o topo da página seguinte ou anterior). Devolve se mudou algo.
+function passarPagina(sentido) {
+  const pg = paginas[paginaAtual], v = vistaAtual();
+  if (pg && pg.folhas && v) {
+    const i = paginaDoPdf(pg, v), topo = f => -pg.folhas[f].y / pg.altura * v.h;
+    let alvo = i + sentido;
+    if (sentido < 0 && v.y < topo(i) - 2) alvo = i;    // no meio da página: volta para o começo dela
+    if (alvo < 0 || alvo >= pg.folhas.length) return false;
+    const antes = v.y;
+    v.y = topo(alvo); prenderPdf(v); pedirDesenho();
+    return Math.abs(v.y - antes) > 0.5;
+  }
+  const antes = paginaAtual;
+  irParaPagina(paginaAtual + sentido);
+  return paginaAtual !== antes;
 }
 function vistaAtual() {
   const pg = paginas[paginaAtual];
@@ -1360,11 +1491,18 @@ let estiloVista = '';
 function aplicarVistaSlide() {
   const v = vistaAtual(), pg = paginas[paginaAtual];
   if (!v || !pg) return;
+  prenderPdf(v);
+  seguirVista(pg, v);
   const k = (tela.clientWidth || W) / W;           // da medida da lousa para pixels da página
   const novo = [v.x * k, v.y * k, v.w * k, v.h * k].map(n => n.toFixed(1)).join(',');
   if (novo === estiloVista && pg.imagem.style.width) return;
   estiloVista = novo;
   Object.assign(pg.imagem.style, { left: v.x * k + 'px', top: v.y * k + 'px', width: v.w * k + 'px', height: v.h * k + 'px' });
+  if (pg.mostrar) {                                // PDF: desenha as páginas que aparecem e mostra em qual página está
+    pg.mostrar(-v.y / v.h, (H - v.y) / v.h);
+    const n = ASSISTIR && estadoRemoto && estadoRemoto.num ? estadoRemoto.num : paginaDoPdf(pg, v) + 1;   // quem assiste mostra a página de quem apresenta
+    el('contador').textContent = n + ' / ' + pg.numPaginas;
+  }
 }
 function slideEm(x, y) {                       // { item: vista, modo } se o ponto está no slide aberto
   const v = vistaAtual();
@@ -1382,7 +1520,8 @@ function atualizarBarra() {
   aplicarCamadas();
   const tem = paginaAtual >= 0;
   for (const id of ['btAnt', 'btProx', 'contador', 'btFechar']) el(id).hidden = !tem;
-  if (tem) el('contador').textContent = (paginaAtual + 1) + ' / ' + paginas.length;
+  el('btBaixar').hidden = !(tem && paginas[paginaAtual].origem === 'pdf');
+  if (tem) { const pg = paginas[paginaAtual], v = vistaAtual(); el('contador').textContent = pg.folhas ? (paginaDoPdf(pg, v) + 1) + ' / ' + pg.numPaginas : (paginaAtual + 1) + ' / ' + paginas.length; }
 }
 
 function irParaPagina(i) {
@@ -1421,6 +1560,185 @@ function fecharPaginas() {
   chavePainel = null; pedirDesenho();
 }
 
+// ---------- anotações presas à página ----------
+// Os desenhos ficam nas medidas da tela, mas cada página lembra em que vista eles foram expressos (pg.ancora).
+// Quando a página rola ou muda de zoom, os desenhos passam pela mesma mudança: andam e crescem junto com ela.
+// Nas medidas do "documento" a página tem largura LARGURA_DOC e começa em (0, 0): é assim que as anotações são guardadas.
+const LARGURA_DOC = 1000;
+function transformarItem(it, px, py, f) {
+  if (it.tipo === 'traco') { for (const p of it.pontos) { p[0] = px(p[0]); p[1] = py(p[1]); } it.tam *= f; }
+  else if (it.tipo === 'imagem') { it.x = px(it.x); it.y = py(it.y); it.w *= f; it.h *= f; }
+  else { it.x = px(it.x); it.y = py(it.y); it.esc = (it.esc || 1) * f; it.tam *= f; }
+  return it;
+}
+function seguirVista(pg, v) {
+  const a = pg.ancora;
+  if (!a) { pg.ancora = { x: v.x, y: v.y, w: v.w }; return; }
+  if (a.x === v.x && a.y === v.y && a.w === v.w) return;
+  const f = v.w / a.w;
+  for (const it of itens) transformarItem(it, x => v.x + (x - a.x) * f, y => v.y + (y - a.y) * f, f);
+  for (const m of maos) for (const p of m.pendentes || []) { p[0] = v.x + (p[0] - a.x) * f; p[1] = v.y + (p[1] - a.y) * f; }
+  pg.ancora = { x: v.x, y: v.y, w: v.w };
+  chaveItens = null;
+}
+const clonarItem = it => it.tipo === 'imagem' ? Object.assign({}, it) : JSON.parse(JSON.stringify(it));
+// Cópia dos itens nas medidas do documento, com a página na largura pedida
+function itensNoDocumento(pg, lista, largura) {
+  const a = pg.ancora || { x: 0, y: 0, w: LARGURA_DOC }, f = largura / a.w;
+  return lista.map(it => transformarItem(clonarItem(it), x => (x - a.x) * f, y => (y - a.y) * f, f));
+}
+const arred = n => Math.round(n * 10) / 10;
+function paraGuardar(it) {
+  if (it.tipo === 'traco') return Object.assign({ tipo: 'traco', cor: it.cor, tam: arred(it.tam), pontos: it.pontos.map(p => [arred(p[0]), arred(p[1])]) }, it.marca ? { marca: true } : {});
+  return { tipo: it.tipo, x: arred(it.x), y: arred(it.y), cor: it.cor, tam: arred(it.tam), rot: it.rot || 0, esc: it.esc || 1 };
+}
+
+// Guardadas no navegador (IndexedDB, junto dos anexos): { v, lousa, arquivos: { caminho: { indice: itens } } }.
+// As imagens soltas não entram: só traços, marca-texto e formas.
+const CHAVE_ANOTACOES = '#anotacoes';
+let anotacoesSalvas = { v: 1, lousa: [], arquivos: {} };
+let anotacoesCarregadas = false, ultimoSalvo = '', avisouFalhaAoSalvar = false;
+function coletarAnotacoes() {
+  const arquivos = {};
+  for (const a of apresentacoes) {
+    const porPagina = {};
+    for (const pg of a.paginas) {
+      const lista = (pg === paginas[paginaAtual] ? itens : anotacoes.get(pg) || []).filter(it => it.tipo !== 'imagem');
+      if (lista.length) porPagina[pg.indice] = itensNoDocumento(pg, lista, LARGURA_DOC).map(paraGuardar);
+    }
+    if (Object.keys(porPagina).length) arquivos[a.caminho] = porPagina;
+  }
+  for (const [c, v] of Object.entries(anotacoesSalvas.arquivos || {}))      // arquivos que não abriram nesta sessão continuam guardados
+    if (!apresentacoes.some(a => a.caminho === c)) arquivos[c] = v;
+  const lousa = (paginaAtual >= 0 ? itensSemPagina : itens).filter(it => it.tipo !== 'imagem').map(paraGuardar);
+  return { v: 1, lousa, arquivos };
+}
+function aplicarAnotacoesSalvas(a) {
+  const salvas = anotacoesSalvas.arquivos && anotacoesSalvas.arquivos[a.caminho];
+  if (!salvas) return;
+  for (const pg of a.paginas) {
+    const l = salvas[pg.indice];
+    if (l && l.length) { anotacoes.set(pg, l.map(clonarItem)); pg.ancora = { x: 0, y: 0, w: LARGURA_DOC }; }
+  }
+}
+async function carregarAnotacoes() {
+  try {
+    const txt = await noBanco('readonly', st => st.get(CHAVE_ANOTACOES));
+    const v = txt ? JSON.parse(txt) : null;
+    if (v && v.v === 1) anotacoesSalvas = { v: 1, lousa: Array.isArray(v.lousa) ? v.lousa : [], arquivos: v.arquivos || {} };
+  } catch (e) { /* sem banco ou dado estragado: começa vazio */ }
+  anotacoesCarregadas = true;
+  if (paginaAtual < 0 && !itens.length && anotacoesSalvas.lousa.length) trocarItens(anotacoesSalvas.lousa.map(clonarItem));
+  for (const a of apresentacoes) if (a.paginas !== paginas) aplicarAnotacoesSalvas(a);   // enviados enquanto carregava
+  ultimoSalvo = JSON.stringify(coletarAnotacoes());
+}
+function salvarAnotacoes() {
+  if (!anotacoesCarregadas) return;
+  const dados = coletarAnotacoes(), txt = JSON.stringify(dados);
+  if (txt === ultimoSalvo) return;
+  ultimoSalvo = txt; anotacoesSalvas = dados;
+  noBanco('readwrite', st => st.put(txt, CHAVE_ANOTACOES)).catch(() => {
+    ultimoSalvo = '';
+    if (!avisouFalhaAoSalvar) { avisouFalhaAoSalvar = true; recado('Não consegui guardar as anotações no navegador (sem espaço ou modo anônimo). Elas valem só até fechar a página.', 6000); }
+  });
+}
+
+// ---------- baixar o PDF com as anotações ----------
+// Cada página do PDF original recebe por cima uma imagem transparente com o que foi desenhado sobre ela
+// (o marca-texto vai numa imagem à parte, misturada como "multiplicar", para o texto continuar legível por baixo).
+const URL_PDFLIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+let promessaPdfLib = null;
+function carregarPdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib);
+  if (!promessaPdfLib) promessaPdfLib = new Promise((ok, falha) => {
+    const s = document.createElement('script'); s.src = URL_PDFLIB;
+    s.onload = () => ok(window.PDFLib);
+    s.onerror = () => { promessaPdfLib = null; falha(new Error('Não consegui baixar o gerador de PDF. Verifique a internet.')); };
+    document.head.appendChild(s);
+  });
+  return promessaPdfLib;
+}
+let baixando = false;
+async function baixarPdfAnotado() {
+  const pg = paginas[paginaAtual];
+  if (!pg || pg.origem !== 'pdf' || baixando) return;
+  baixando = true;
+  try {
+    recado('Montando o PDF anotado…', 0);
+    const PDFLib = await carregarPdfLib();
+    const original = pg.original || await lerAnexo(pg.caminho);
+    if (!original) throw new Error('não achei o arquivo original');
+    let doc = await PDFLib.PDFDocument.load(await original.arrayBuffer(), { ignoreEncryption: true });
+    const lista = itensNoDocumento(pg, itens, pg.largura);
+    const daFolha = i => lista.filter(it => tocaFaixa(it, pg.folhas[i].y, pg.folhas[i].y + pg.folhas[i].h));
+    // Desenha os itens de uma página num contexto: primeiro o marca-texto (multiplicar), depois o resto
+    const desenharAnotacoes = (g, i, daqui) => {
+      const antes = ctx; ctx = g;
+      ctx.save(); ctx.translate(0, -pg.folhas[i].y);
+      ctx.globalCompositeOperation = 'multiply'; desenharItens(daqui.filter(it => it.marca), true);
+      ctx.globalCompositeOperation = 'source-over'; desenharItens(daqui.filter(it => !it.marca), true);
+      ctx.restore(); ctx = antes;
+    };
+    let anotadas = 0, comoImagem = false;
+    if (doc.isEncrypted) {
+      // PDF protegido: não dá para escrever nele. Cada página é desenhada com as anotações e entra como imagem num PDF novo.
+      comoImagem = true;
+      doc = await PDFLib.PDFDocument.create();
+      for (let i = 0; i < pg.folhas.length; i++) {
+        recado('Montando o PDF anotado… página ' + (i + 1) + ' de ' + pg.folhas.length, 0);
+        const c = await pg.renderizar(i), daqui = daFolha(i);
+        if (daqui.length) { anotadas++; desenharAnotacoes(c.getContext('2d'), i, daqui); }
+        const jpg = await doc.embedJpg(await new Promise(ok => c.toBlob(b => b.arrayBuffer().then(ok), 'image/jpeg', 0.9)));
+        c.width = c.height = 0;
+        const f = pg.folhas[i];
+        doc.addPage([f.pw, f.ph]).drawImage(jpg, { x: 0, y: 0, width: f.pw, height: f.ph });
+      }
+    }
+    const folhasPdf = comoImagem ? [] : doc.getPages();
+    for (let i = 0; i < pg.folhas.length && i < folhasPdf.length; i++) {
+      const f = pg.folhas[i];
+      const daqui = daFolha(i);
+      if (!daqui.length) continue;
+      anotadas++;
+      const camadas = [[daqui.filter(it => it.marca), PDFLib.BlendMode.Multiply], [daqui.filter(it => !it.marca), PDFLib.BlendMode.Normal]];
+      for (const [itensDaCamada, mistura] of camadas) {
+        if (!itensDaCamada.length) continue;
+        const c = document.createElement('canvas'); c.width = pg.largura; c.height = f.h;
+        const antes = ctx; ctx = c.getContext('2d');
+        ctx.translate(0, -f.y); desenharItens(itensDaCamada, true);
+        ctx = antes;
+        const png = await doc.embedPng(await new Promise(ok => c.toBlob(b => b.arrayBuffer().then(ok), 'image/png')));
+        c.width = c.height = 0;
+        const folha = folhasPdf[i], cb = folha.getCropBox(), giro = ((folha.getRotation().angle % 360) + 360) % 360;
+        const opc = { blendMode: mistura };
+        if (giro === 90) Object.assign(opc, { x: cb.x + cb.width, y: cb.y, width: cb.height, height: cb.width, rotate: PDFLib.degrees(90) });
+        else if (giro === 180) Object.assign(opc, { x: cb.x + cb.width, y: cb.y + cb.height, width: cb.width, height: cb.height, rotate: PDFLib.degrees(180) });
+        else if (giro === 270) Object.assign(opc, { x: cb.x, y: cb.y + cb.height, width: cb.height, height: cb.width, rotate: PDFLib.degrees(270) });
+        else Object.assign(opc, { x: cb.x, y: cb.y, width: cb.width, height: cb.height });
+        folha.drawImage(png, opc);
+      }
+    }
+    const bytes = await doc.save({ useObjectStreams: false });   // com fluxos de objetos, alguns leitores não abrem o arquivo gerado
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = pg.arquivo.replace(/\.pdf$/i, '') + ' (anotado).pdf';
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    recado((anotadas ? 'PDF baixado com anotações em ' + anotadas + (anotadas === 1 ? ' página.' : ' páginas.') : 'PDF baixado (ainda sem anotações).')
+      + (comoImagem ? '\nO PDF original é protegido contra edição, então as páginas foram salvas como imagem (o texto não pode ser selecionado).' : ''), comoImagem ? 8000 : 4000);
+  } catch (e) {
+    recado('Não consegui montar o PDF anotado (' + (e && e.message || 'erro') + ').', 8000);
+  } finally { baixando = false; }
+}
+// O item passa pela faixa vertical [y0, y1]? (medidas do documento)
+function tocaFaixa(it, y0, y1) {
+  let a, b;
+  if (it.tipo === 'traco') { a = Infinity; b = -Infinity; for (const p of it.pontos) { if (p[1] < a) a = p[1]; if (p[1] > b) b = p[1]; } a -= it.tam; b += it.tam; }
+  else if (it.tipo === 'imagem') { a = it.y; b = it.y + it.h; }
+  else { const m = Math.max(...MEIA[it.tipo]) * 1.5 * (it.esc || 1) + it.tam; a = it.y - m; b = it.y + m; }
+  return b >= y0 && a <= y1;
+}
+
 let relogioRecado = 0;
 function recado(texto, ms) {
   clearTimeout(relogioRecado);
@@ -1439,7 +1757,8 @@ function paginasRecebidas(resultado) {
     if (paginaAtual >= 0) fecharPaginas();
     abrirApresentacao(primeira);
     guardarArquivos();
-    linhas.push(novas.length === 1 ? '1 página recebida.' : novas.length + ' páginas recebidas.');
+    const total = novas.reduce((s, p) => s + (p.numPaginas || 1), 0);
+    linhas.push(total === 1 ? '1 página recebida.' : total + ' páginas recebidas.');
     const avisos = new Set(), comAviso = novas.filter(pg => pg.avisos.length);
     for (const pg of comAviso) for (const a of pg.avisos) avisos.add(a);
     if (comAviso.length) linhas.push('Em ' + comAviso.length + (comAviso.length === 1 ? ' slide' : ' slides') + ' algo ficou de fora:', ...Array.from(avisos).map(a => '• ' + a));
@@ -1470,13 +1789,21 @@ function clicar(x, y) {
     if (cliqueDoPonteiro) entradaImagens.click(); else recado('Para escolher as imagens, clique em Importar imagens com o mouse ou toque.', 5000);
   }
   if (b.tipo === 'galeria') { painelAberto = null; abrirCarrossel(); return; }
-  if (b.tipo === 'zoomOriginal') { const pg = paginas[paginaAtual]; if (pg) vistas.set(pg, vistaInicial(pg)); pedirDesenho(); return; }
+  if (b.tipo === 'zoomOriginal') {
+    const pg = paginas[paginaAtual], v = vistaAtual();
+    if (pg) {
+      const nova = vistaInicial(pg);
+      if (v && v.pdf) { nova.y = v.y / v.h * nova.h; prenderPdf(nova); }    // PDF: volta à largura da tela sem sair do lugar
+      vistas.set(pg, nova);
+    }
+    pedirDesenho(); return;
+  }
   piscaPor.set(idDe(b), piscaAte = performance.now() + 220);
   if (b.tipo === 'menu') painelAberto = painelAberto === b.valor ? null : b.valor;
   else if (b.tipo === 'recolher') { menuAberto = false; painelAberto = null; }
   else if (b.tipo === 'expandir') menuAberto = true;
-  else if (b.tipo === 'ant') irParaPagina(paginaAtual - 1);
-  else if (b.tipo === 'prox') irParaPagina(paginaAtual + 1);
+  else if (b.tipo === 'ant') passarPagina(-1);
+  else if (b.tipo === 'prox') passarPagina(1);
   else if (b.tipo === 'cor') cor = b.valor;
   else if (b.tipo === 'tam') tam = b.valor;
   else if (b.tipo === 'forma') {
@@ -1487,6 +1814,10 @@ function clicar(x, y) {
   else if (b.tipo === 'limpar' || b.tipo === 'lixeira') limpar();   // a lixeira apaga tudo o que está na tela
   else if (b.tipo === 'camera') { cameraVisivel = !cameraVisivel; aplicarCamadas(); }
   else if (b.tipo === 'caneta') { if (canetaAtiva) desligarCaneta(); else canetaAtiva = true; }
+  else if (b.tipo === 'marcador') {             // liga o marca-texto (e o lápis junto); desligar volta ao lápis comum
+    marcador = !marcador; if (marcador) canetaAtiva = true;
+    recado(marcador ? 'Marca-texto ligado: o lápis risca largo e transparente. Dica: escolha o amarelo.' : 'Marca-texto desligado: lápis comum.', 2500);
+  }
 }
 
 // No celular chegam menos quadros por segundo; a suavização é mais leve para o cursor não ficar para trás da mão
@@ -1531,6 +1862,7 @@ class Mao {
     this.leitura = '';
   }
   largarTudo() {                    // a mão sumiu de verdade: zera os filtros e encerra o traço
+    normalizarTraco(this.tracoAtual);
     this.ponta = null; this.pontoPinca = null; this.medidas = null; this.tracoAtual = null; this.pendentes = []; this.borracha = null; this.pinca = false; this.agarrada = null;
     for (const f of [this.fx, this.fy, this.gx, this.gy]) f.reiniciar();
   }
@@ -1555,8 +1887,12 @@ function ajustarTela() {
   const dpr = Math.min(window.devicePixelRatio || 1, MOVEL ? 1.5 : 2);       // no celular, menos pixels para desenhar a cada quadro
   const pl = Math.round(lw * dpr), pa = Math.round(lh * dpr);
   if (tela.width !== pl || tela.height !== pa) { tela.width = pl; tela.height = pa; }     // mexer no tamanho apaga a lousa: só quando muda
-  chaveItens = null; chavePainel = null; vistas.clear(); estiloVista = ''; pedirDesenho();   // tela mudou de formato: os slides voltam ao enquadramento inicial
-  for (const it of itens) if (it.tipo !== 'traco') {              // formas que ficaram fora da tela voltam para dentro
+  for (const [pg, v] of vistas) {                // tela mudou de formato: os slides voltam ao enquadramento inicial; o PDF continua na mesma altura
+    if (!v.pdf) { vistas.delete(pg); continue; }
+    const nova = vistaInicial(pg); nova.y = v.y / v.h * nova.h; vistas.set(pg, prenderPdf(nova));
+  }
+  chaveItens = null; chavePainel = null; estiloVista = ''; pedirDesenho();
+  if (paginaAtual < 0) for (const it of itens) if (it.tipo !== 'traco') {   // formas que ficaram fora da tela voltam para dentro (na página, elas acompanham a página)
     it.x = Math.min(W - 20, Math.max(20, it.x)); it.y = Math.min(H - 20, Math.max(20, it.y));
   }
 }
@@ -2069,10 +2405,8 @@ function processarPassador(m, agora) {
     m.passadorFeito = true;                     // passa um slide por sinal; para passar outro, desfaça e refaça o sinal
     if (paginaAtual < 0) recado('Nenhum slide aberto. Envie um .pptx, um PDF ou imagens pelo botão Enviar arquivo.', 3000);
     else {
-      const antes = paginaAtual;
-      irParaPagina(paginaAtual + sentido);
       const pdf = paginas[paginaAtual] && paginas[paginaAtual].origem === 'pdf';
-      if (paginaAtual === antes) recado(sentido > 0 ? (pdf ? 'Esta é a última página.' : 'Este é o último slide.') : (pdf ? 'Esta é a primeira página.' : 'Este é o primeiro slide.'), 1800);
+      if (!passarPagina(sentido)) recado(sentido > 0 ? (pdf ? 'Esta é a última página.' : 'Este é o último slide.') : (pdf ? 'Esta é a primeira página.' : 'Este é o primeiro slide.'), 1800);
     }
   }
   return true;
@@ -2117,7 +2451,8 @@ function apagar(c) {
     if (!mudou) { novo.push(it); continue; }
     mudouAlgo = true;
     for (const m of maos) if (m.tracoAtual === it) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; }
-    for (const pts of pedacos) novo.push({ tipo: 'traco', cor: it.cor, tam: it.tam, pontos: pts });
+    if (tracoPonteiro && tracoPonteiro.traco === it) tracoPonteiro = null;
+    for (const pts of pedacos) novo.push(Object.assign({ tipo: 'traco', cor: it.cor, tam: it.tam, pontos: pts }, it.marca ? { marca: true } : {}));
   }
   if (mudouAlgo) { itens = novo; pedirDesenho(); }
 }
@@ -2138,7 +2473,8 @@ function desenhar(m, agora, d) {
     if (!m.tracoAtual) {
       if (!m.querDesde) m.querDesde = agora;
       if (agora - m.querDesde < 80) return;     // espera o gesto firmar, para não deixar um ponto solto ao passar por ele
-      m.tracoAtual = { tipo: 'traco', cor, tam, pontos: [] }; itens.push(m.tracoAtual);
+      m.tracoAtual = marcador ? { tipo: 'traco', cor, tam: larguraMarcador(tam), pontos: [], marca: true } : { tipo: 'traco', cor, tam, pontos: [] };
+      itens.push(m.tracoAtual);
     }
     if (m.pendentes.length) { m.tracoAtual.pontos.push(...m.pendentes); m.pendentes = []; }
     m.inicioPausa = 0;
@@ -2155,7 +2491,7 @@ function desenhar(m, agora, d) {
 function pausarTraco(m, agora, pontoProvisorio, imediato) {
   if (!m.tracoAtual) return;
   if (!m.inicioPausa) m.inicioPausa = agora;
-  if (imediato || agora - m.inicioPausa > TOLERANCIA_TRACO) { m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; pedirDesenho(); }
+  if (imediato || agora - m.inicioPausa > TOLERANCIA_TRACO) { normalizarTraco(m.tracoAtual); m.tracoAtual = null; m.pendentes = []; m.inicioPausa = 0; pedirDesenho(); }
   else if (pontoProvisorio) m.pendentes.push(pontoProvisorio);
 }
 
@@ -2230,9 +2566,66 @@ function caminhoForma(tipo, x, y, k) {
   else ctx.rect(x - mw * k, y - mh * k, mw * 2 * k, mh * 2 * k);
 }
 
+// ---------- normalização do traço (lápis e marca-texto), feita quando o traço termina ----------
+// Quase reto vira uma reta exata (e, se estiver perto de horizontal, vertical ou 45°, encaixa no ângulo);
+// curvo é reamostrado em passos iguais e suavizado, tirando o tremido sem mudar a forma.
+function reamostrar(p, passo) {
+  const r = [p[0]];
+  let sobra = 0;
+  for (let i = 1; i < p.length; i++) {
+    const a = p[i - 1], b = p[i], d = dist(a, b);
+    if (!d) continue;
+    let s = passo - sobra;
+    while (s <= d) { r.push([a[0] + (b[0] - a[0]) * s / d, a[1] + (b[1] - a[1]) * s / d]); s += passo; }
+    sobra = d - (s - passo);
+  }
+  const ult = p[p.length - 1];
+  if (dist(r[r.length - 1], ult) > passo * 0.3) r.push(ult); else r[r.length - 1] = ult;
+  return r;
+}
+function simplificar(p, tol) {                  // Ramer-Douglas-Peucker: tira pontos que não mudam a forma
+  if (p.length < 3) return p;
+  const manter = new Uint8Array(p.length); manter[0] = manter[p.length - 1] = 1;
+  const pilha = [[0, p.length - 1]];
+  while (pilha.length) {
+    const [i, j] = pilha.pop();
+    let maior = 0, k = -1;
+    for (let m = i + 1; m < j; m++) { const d = distSegmento(p[m], p[i], p[j]); if (d > maior) { maior = d; k = m; } }
+    if (k >= 0 && maior > tol) { manter[k] = 1; pilha.push([i, k], [k, j]); }
+  }
+  return p.filter((_, i) => manter[i]);
+}
+function normalizarTraco(t) {
+  if (!t || t.tipo !== 'traco' || t.pontos.length < 3) return;
+  const p = t.pontos, a = p[0], b = p[p.length - 1], corda = dist(a, b);
+  let comp = 0; for (let i = 1; i < p.length; i++) comp += dist(p[i - 1], p[i]);
+  if (comp < 6) return;
+  let desvio = 0; for (const q of p) desvio = Math.max(desvio, distSegmento(q, a, b));
+  const folga = t.marca ? 0.09 : 0.06;           // o marca-texto, largo, aceita um pouco mais de tremido
+  if (corda > 25 && desvio < Math.max(5, corda * folga) && comp < corda * 1.15) {
+    let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const alvo = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
+    if (Math.abs(ang - alvo) < 6 * Math.PI / 180) ang = alvo;
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, h = corda / 2, c = Math.cos(ang), s = Math.sin(ang);
+    t.pontos = [[mx - c * h, my - s * h], [mx + c * h, my + s * h]];
+    return;
+  }
+  let r = reamostrar(p, Math.max(2.5, Math.min(6, comp / 80)));
+  if (r.length < 3) return;
+  for (let k = 0; k < 3; k++) {                  // suavização 1-2-1, mantendo as pontas no lugar
+    r = r.map((q, i) => i === 0 || i === r.length - 1 ? q : [(r[i - 1][0] + 2 * q[0] + r[i + 1][0]) / 4, (r[i - 1][1] + 2 * q[1] + r[i + 1][1]) / 4]);
+  }
+  t.pontos = simplificar(r, 0.5);
+}
+
 function desenharTraco(t) {
   const p = t.pontos;
   if (!p.length) return;
+  if (t.marca) {                                // marca-texto: o traço inteiro de uma vez, transparente (não escurece onde se cruza)
+    ctx.save(); ctx.globalAlpha = ALFA_MARCADOR;
+    desenharTraco(Object.assign({}, t, { marca: false }));
+    ctx.restore(); return;
+  }
   ctx.strokeStyle = t.cor; ctx.fillStyle = t.cor; ctx.lineWidth = t.tam;
   if (p.length === 1) { ctx.beginPath(); ctx.arc(p[0][0], p[0][1], t.tam / 2, 0, Math.PI * 2); ctx.fill(); return; }
   // Curvas passando pelos pontos médios: o traço sai arredondado em vez de em segmentos retos
@@ -2246,13 +2639,14 @@ function desenharTraco(t) {
 }
 
 
-function desenharItens(lista) {
+function desenharItens(lista, semAlcas) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   for (const it of lista) {
     if (it.tipo === 'traco') { desenharTraco(it); continue; }
     if (it.tipo === 'imagem') {
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 10 * K;
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = semAlcas ? 0 : 10 * K;
       ctx.drawImage(it.img, it.x, it.y, it.w, it.h); ctx.restore();
+      if (semAlcas) continue;
       ctx.beginPath(); ctx.arc(it.x + it.w, it.y + it.h, RAIO_ALCA * K, 0, Math.PI * 2);    // bolinha do tamanho, no canto
       ctx.fillStyle = '#1f5fe0'; ctx.fill(); ctx.lineWidth = 3 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
       continue;
@@ -2306,7 +2700,7 @@ function icone(id, x, y, l) {
 }
 
 function desenharBotao(b, agora, sobre) {
-  const selecionado = (b.tipo === 'cor' && b.valor === cor) || (b.tipo === 'tam' && b.valor === tam) || (b.tipo === 'camera' && cameraVisivel) || (b.tipo === 'caneta' && canetaAtiva);
+  const selecionado = (b.tipo === 'cor' && b.valor === cor) || (b.tipo === 'tam' && b.valor === tam) || (b.tipo === 'camera' && cameraVisivel) || (b.tipo === 'caneta' && canetaAtiva) || (b.tipo === 'marcador' && marcador);
   const piscando = (piscaPor.get(idDe(b)) || 0) > agora;
   const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
   retArred(b.x, b.y, b.w, b.h, 8 * K);
@@ -2315,7 +2709,7 @@ function desenharBotao(b, agora, sobre) {
   ctx.fillStyle = '#111111'; ctx.font = '600 ' + Math.round(13 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   if (b.tipo === 'tam') { ctx.beginPath(); ctx.arc(cx, cy, b.valor / 2 + 1, 0, Math.PI * 2); ctx.fill(); }
   else if (b.tipo === 'forma') { caminhoForma(b.valor, cx, cy, 0.17 * K); ctx.strokeStyle = '#111111'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke(); }
-  else if (b.tipo !== 'cor') ctx.fillText({ limpar: 'Limpar', camera: 'Câmera', caneta: 'Caneta e borracha: ' + (canetaAtiva ? 'ligadas' : 'desligadas'), ant: '◀  Slide anterior', prox: 'Próximo slide  ▶', importar: 'Importar imagens', zoomOriginal: 'Slide no tamanho original', galeria: 'Abrir carrossel (' + (galeria.length + apresentacoes.length) + (galeria.length + apresentacoes.length === 1 ? ' item)' : ' itens)') }[b.tipo], cx, cy);
+  else if (b.tipo !== 'cor') ctx.fillText({ limpar: 'Limpar', camera: 'Câmera', caneta: 'Caneta e borracha: ' + (canetaAtiva ? 'ligadas' : 'desligadas'), marcador: 'Marca-texto: ' + (marcador ? 'ligado' : 'desligado'), ant: '◀  Slide anterior', prox: 'Próximo slide  ▶', importar: 'Importar imagens', zoomOriginal: 'Slide no tamanho original', galeria: 'Abrir carrossel (' + (galeria.length + apresentacoes.length) + (galeria.length + apresentacoes.length === 1 ? ' item)' : ' itens)') }[b.tipo], cx, cy);
   retArred(b.x, b.y, b.w, b.h, 8 * K);
   if (selecionado) { ctx.strokeStyle = '#1f5fe0'; ctx.lineWidth = 4; }
   else if (sobre.has(idDe(b))) { ctx.strokeStyle = '#111111'; ctx.lineWidth = 3; }
@@ -2352,7 +2746,8 @@ function desenharInterface(agora, sobre) {
         ctx.fillStyle = '#ffffff'; ctx.font = '600 ' + Math.round(11 * K) + 'px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         let rot = ent.a.nome.replace(/\.(pptx|pdf)$/i, '');
         const ehPdf = ent.a.paginas[0] && ent.a.paginas[0].origem === 'pdf', un = ehPdf ? ['página', 'páginas'] : ['slide', 'slides'];
-        const fim = '  ·  ' + ent.a.paginas.length + ' ' + (ent.a.paginas.length === 1 ? un[0] : un[1]);
+        const n = ent.a.paginas[0].numPaginas || ent.a.paginas.length;
+        const fim = '  ·  ' + n + ' ' + (n === 1 ? un[0] : un[1]);
         while (rot.length > 1 && ctx.measureText(rot + '…' + fim).width > r.w - 12 * K) rot = rot.slice(0, -1);
         ctx.fillText((rot === ent.a.nome.replace(/\.(pptx|pdf)$/i, '') ? rot : rot + '…') + fim, r.x + 6 * K, r.y + r.h - fx / 2);
         ctx.restore();
@@ -2497,6 +2892,7 @@ let chaveItens = null, chavePainel = null, temItensParados = false;
 function itensAtivos() {           // o que está mudando agora: traços em andamento e imagens presas
   const s = new Set(maos.flatMap(m => [m.tracoAtual, m.agarrada && m.agarrada.item]).filter(Boolean));
   if (arrastePonteiro) s.add(arrastePonteiro.item);
+  if (tracoPonteiro && tracoPonteiro.traco) s.add(tracoPonteiro.traco);
   return s.size ? itens.filter(i => s.has(i)) : [];
 }
 
@@ -2519,10 +2915,10 @@ function guardarItensParados(ativos) {
 function guardarPainel(agora, sobre) {
   const e = tela.width / W, partes = montarInterface();
   const piscando = Array.from(piscaPor).filter(([, t]) => t > agora).map(([id]) => id).join(',');
-  const chave = [arrastandoSobreLixeira(), tela.clientWidth, carrossel ? carrossel.pagina : -1, galeria.length, apresentacoes.length, menuAberto, painelAberto, cor, tam, cameraVisivel, canetaAtiva, paginaAtual, paginas.length, W, H, e, Array.from(sobre).join(','), piscando].join('|');
+  const chave = [arrastandoSobreLixeira(), tela.clientWidth, carrossel ? carrossel.pagina : -1, galeria.length, apresentacoes.length, menuAberto, painelAberto, cor, tam, cameraVisivel, canetaAtiva, marcador, paginaAtual, paginas.length, W, H, e, Array.from(sobre).join(','), piscando].join('|');
   if (chave !== chavePainel) {
     chavePainel = chave;
-    const direita = Math.max(...partes.map(r => r.x + r.w)) + 4;
+    const direita = partes.length ? Math.max(...partes.map(r => r.x + r.w)) + 4 : 1;
     const l = Math.ceil(direita * e) + 1, a = tela.height;
     if (telaPainel.width !== l || telaPainel.height !== a) { telaPainel.width = l; telaPainel.height = a; }
     ctx = telaPainel.getContext('2d');
@@ -2537,10 +2933,10 @@ function guardarPainel(agora, sobre) {
 // Anel de espera: fundo claro e um arco escuro que se completa em 2 s
 function quadro() {
   requestAnimationFrame(quadro);
-  if (video.readyState < 2) return;
+  if (video.readyState < 2 && !ASSISTIR) return;
   const agora = performance.now();
 
-  if (video.currentTime !== ultimoTempo) {      // chegou um quadro novo da câmera
+  if (!ASSISTIR && video.currentTime !== ultimoTempo) {      // chegou um quadro novo da câmera
     ultimoTempo = video.currentTime;
     const t0 = performance.now();
     let res;
@@ -2575,6 +2971,7 @@ function quadro() {
   if (!sujo) return;                            // nada mudou desde o último desenho
   sujo = false;
 
+  if (paginaAtual >= 0) aplicarVistaSlide();     // as anotações acompanham a página antes de serem desenhadas
   const ativos = itensAtivos();
   guardarItensParados(ativos);
   const sobre = new Set();                      // botões sob um indicador apontando: ganham contorno
@@ -2596,21 +2993,328 @@ function quadro() {
   ctx.setTransform(tela.width / W, 0, 0, tela.height / H, 0, 0);
   desenharMenuDaMao(agora);
   const v = vistaAtual();
-  if (v) {                                      // bolinha azul do canto do slide
-    aplicarVistaSlide();
+  if (v) aplicarVistaSlide();
+  if (v && !ASSISTIR) {                         // bolinha azul do canto do slide (quem assiste não a vê: não mexe no zoom)
     const c = cantoDoSlide(v);
     ctx.beginPath(); ctx.arc(c[0], c[1], RAIO_ALCA * K, 0, Math.PI * 2);
     ctx.fillStyle = '#1f5fe0'; ctx.fill(); ctx.lineWidth = 3 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
   }
   for (const m of maos) desenharMao(m);
+  if (ASSISTIR) desenharPontasRemotas();
   if (radial || duas.desde || maos.some(m => m.abrirDesde || (m.passadorDesde && !m.passadorFeito))) sujo = true;           // contagem ou menu na tela: continua redesenhando
 }
 
 // ---------- mouse, toque e teclado ----------
+// ---------- transmissão pela rede (servidor.js) ----------
+// O apresentador publica, várias vezes por segundo e só quando muda: o arquivo aberto, a página, o retângulo do documento
+// que aparece na tela dele, as pontas dos indicadores e as anotações (nas medidas do documento). Quem assiste recebe
+// tudo pelo servidor e mostra o mesmo trecho, ajustado ao tamanho da própria tela, sem poder mexer.
+let transmitindo = false, seqTx = 0, ultimoEstadoTx = '', ultimaAnotTx = '', ultimaAnotT = 0;
+const enviados = new Map();         // id da apresentação -> 'ok' | 'enviando' | instante da última falha
+let promessaTransmissao = null;
+function iniciarTransmissao(abrirQr = true) {          // uma só tentativa por vez (ao abrir a página e pelo botão)
+  if (!promessaTransmissao) promessaTransmissao = comecarTransmissao(abrirQr).finally(() => { promessaTransmissao = null; });
+  return promessaTransmissao;
+}
+// Onde está o servidor: o próprio endereço da página (aberta por http://localhost:8080) ou, com a página aberta de outro
+// jeito neste computador (Live Server, file://), o servidor em http://localhost:8080
+const PORTA_SERVIDOR = 8080;
+let BASE = '';
+async function acharServidor() {
+  const bases = (PELO_SERVIDOR ? [''] : []).concat(location.host === 'localhost:' + PORTA_SERVIDOR ? [] : ['http://localhost:' + PORTA_SERVIDOR]);
+  for (const b of bases) {
+    try {
+      const r = await fetch(b + '/servidor', { cache: 'no-store' });
+      if (!r.ok) continue;
+      const info = await r.json();
+      if (info && info.quadro && info.apresentador) return { base: b, info };
+    } catch (e) { /* não está aqui */ }
+  }
+  return null;
+}
+async function comecarTransmissao(abrirQr) {
+  if (ASSISTIR || transmitindo) return;
+  const achado = await acharServidor();
+  if (!achado) return;
+  const info = achado.info;
+  BASE = achado.base;
+  transmitindo = true;
+  try { sessionStorage.setItem('quadro-no-ar.transmitindo', '1'); } catch (e) { /* sem armazenamento */ }
+  enderecosDaRede = info.enderecos || [];
+  el('btQr').textContent = 'QR Code';
+  // ao começar a transmitir, o QR Code já abre (uma vez por aba, para não reabrir a cada recarga)
+  let jaAbriu = false;
+  try { jaAbriu = sessionStorage.getItem('quadro-no-ar.qr-aberto') === '1'; sessionStorage.setItem('quadro-no-ar.qr-aberto', '1'); } catch (e) { /* sem armazenamento */ }
+  if (abrirQr && !jaAbriu && enderecosDaRede.length) mostrarQr();
+  const selo = el('aoVivo'), rede = enderecosDaRede[0];
+  const mostrar = n => { selo.hidden = false; selo.textContent = 'Ao vivo' + (rede ? ' · ' + rede.replace('http://', '') : '') + ' · ' + n + ' assistindo'; };
+  mostrar(info.assistindo || 0);
+  selo.title = 'Os outros aparelhos da rede assistem abrindo: ' + (info.enderecos || []).join(', ');
+  setInterval(transmitir, 80);
+  setInterval(() => fetch(BASE + '/servidor', { cache: 'no-store' }).then(r => r.json()).then(i => mostrar(i.assistindo || 0)).catch(() => {}), 4000);
+}
+// ----- QR Code com o endereço de assistir -----
+const URL_QR = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+let enderecosDaRede = [], promessaQr = null;
+function carregarQr() {
+  if (window.qrcode) return Promise.resolve(window.qrcode);
+  if (!promessaQr) promessaQr = new Promise((ok, falha) => {
+    const s = document.createElement('script'); s.src = URL_QR;
+    s.onload = () => ok(window.qrcode);
+    s.onerror = () => { promessaQr = null; falha(new Error('sem internet')); };
+    document.head.appendChild(s);
+  });
+  return promessaQr;
+}
+// Botão Transmitir: com o servidor da rede, mostra o QR Code; sem ele, explica como abrir o quadro pelo servidor
+// Botão Transmitir: com o servidor no ar, transmite e mostra o QR Code. Sem ele, pede ao sistema para iniciá-lo
+// (o endereço quadronoar://, registrado pelo instalar.sh) e espera ele subir; se não subir, explica o que fazer.
+let iniciandoServidor = false;
+function cartaoDeAviso(titulo, texto, comPassos) {
+  el('qrTitulo').textContent = titulo;
+  el('qrSemServidorTexto').textContent = texto;
+  el('qrPassos').hidden = !comPassos;
+  el('qrSemServidor').hidden = false;
+  for (const id of ['qrDesenho', 'qrEndereco', 'qrDica', 'qrOutros']) el(id).hidden = true;
+  el('qr').hidden = false;
+}
+async function botaoTransmitir() {
+  if (!transmitindo) await iniciarTransmissao(false);
+  if (transmitindo) {
+    if (enderecosDaRede.length) mostrarQr();
+    else cartaoDeAviso('Transmitir para a rede', 'O servidor está no ar, mas este computador não está conectado a nenhuma rede (Wi-Fi ou cabo). Conecte-se e recarregue a página.', false);
+    return;
+  }
+  if (iniciandoServidor) return;
+  iniciandoServidor = true;
+  cartaoDeAviso('Iniciando a transmissão…', 'Ligando o servidor da rede. Se o navegador perguntar se pode abrir o "xdg-open", permita (marque "Sempre permitir" para não perguntar de novo).', false);
+  const link = document.createElement('a'); link.href = 'quadronoar://iniciar'; link.hidden = true;
+  document.body.appendChild(link); link.click(); link.remove();
+  const inicio = performance.now();
+  while (!transmitindo && !el('qr').hidden && performance.now() - inicio < 15000) {      // até 15 s (ou até fechar o cartão)
+    await new Promise(ok => setTimeout(ok, 500));
+    await iniciarTransmissao(false);
+  }
+  iniciandoServidor = false;
+  if (transmitindo) { if (enderecosDaRede.length) mostrarQr(); else botaoTransmitir(); return; }
+  if (!el('qr').hidden) cartaoDeAviso('Transmitir para a rede', 'Não consegui ligar o servidor sozinho. Faça uma destas opções e clique em Transmitir de novo:', true);
+}
+async function mostrarQr(endereco) {
+  endereco = endereco || enderecosDaRede[0];
+  if (!endereco) return;
+  el('qrSemServidor').hidden = true; el('qrTitulo').textContent = 'Aponte a câmera do celular para assistir';
+  for (const id of ['qrDesenho', 'qrEndereco', 'qrDica', 'qrOutros']) el(id).hidden = false;
+  let qrcode;
+  try { qrcode = await carregarQr(); }
+  catch (e) { recado('Não consegui carregar o gerador de QR Code. Endereço para assistir: ' + endereco, 10000); return; }
+  const qr = qrcode(0, 'M'); qr.addData(endereco); qr.make();
+  const n = qr.getModuleCount(), borda = 4, px = 8, c = el('qrDesenho'), g = c.getContext('2d');
+  c.width = c.height = (n + borda * 2) * px;
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#000000';
+  for (let l = 0; l < n; l++) for (let k = 0; k < n; k++) if (qr.isDark(l, k)) g.fillRect((k + borda) * px, (l + borda) * px, px, px);
+  el('qrEndereco').textContent = endereco;
+  // com mais de uma rede (cabo e Wi-Fi, máquina virtual...), dá para trocar o endereço do QR Code
+  const outros = el('qrOutros'); outros.replaceChildren();
+  if (enderecosDaRede.length > 1) for (const e of enderecosDaRede) {
+    const b = document.createElement('button'); b.type = 'button';
+    b.textContent = e.replace('http://', ''); b.className = e === endereco ? 'atual' : '';
+    b.addEventListener('click', () => mostrarQr(e));
+    outros.appendChild(b);
+  }
+  el('qr').hidden = false;
+}
+el('btQr').addEventListener('click', botaoTransmitir);
+el('qrFechar').addEventListener('click', () => { el('qr').hidden = true; });
+el('qr').addEventListener('click', e => { if (e.target === el('qr')) el('qr').hidden = true; });     // clique fora do cartão fecha
+addEventListener('keydown', e => { if (e.key === 'Escape') el('qr').hidden = true; });
+
+async function enviarArquivo(a) {
+  const st = enviados.get(a.id);
+  if (st === 'ok' || st === 'enviando' || (typeof st === 'number' && performance.now() - st < 3000)) return;
+  enviados.set(a.id, 'enviando');
+  try {
+    const arq = a.original || await lerAnexo(a.caminho);
+    if (!arq) throw new Error('sem arquivo');
+    const r = await fetch(BASE + '/arquivo?id=' + encodeURIComponent(a.id), { method: 'PUT', headers: { 'X-Nome': encodeURIComponent(a.nome) }, body: arq });
+    if (!r.ok) throw new Error('recusado');
+    enviados.set(a.id, 'ok');
+  } catch (e) { enviados.set(a.id, performance.now()); }       // tenta de novo daqui a pouco
+}
+function publicar(tipo, texto) {
+  fetch(BASE + '/publicar?tipo=' + tipo + '&seq=' + (++seqTx), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: texto }).catch(() => {});
+}
+const pontasApontando = () => maos.filter(m => m.lm && m.ponta && m.dedos && m.dedos[1] === 1).map(m => m.ponta);
+function transmitir() {
+  const pg = paginas[paginaAtual], a = pg && apresentacoes.find(x => x.paginas === paginas);
+  let estado;
+  if (a) {
+    if (enviados.get(a.id) !== 'ok') enviarArquivo(a);
+    const v = vistaAtual(), f = LARGURA_DOC / v.w, doc = p => [arred((p[0] - v.x) * f), arred((p[1] - v.y) * f)];
+    estado = { modo: 'pagina', id: a.id, nome: a.nome, pronto: enviados.get(a.id) === 'ok', indice: paginaAtual,
+               ret: [-v.x * f, -v.y * f, W * f, H * f].map(arred), pontas: pontasApontando().map(doc), num: pg.folhas ? paginaDoPdf(pg, v) + 1 : 0 };
+  } else estado = { modo: 'lousa', W, H, pontas: pontasApontando().map(p => p.map(arred)) };
+  const texto = JSON.stringify(estado);
+  if (texto !== ultimoEstadoTx) { ultimoEstadoTx = texto; publicar('estado', texto); }
+  const agora = performance.now();
+  if (agora - ultimaAnotT < 150) return;
+  ultimaAnotT = agora;
+  const lista = itens.filter(it => it.tipo !== 'imagem');
+  const anot = a ? { id: a.id, indice: paginaAtual, itens: itensNoDocumento(pg, lista, LARGURA_DOC).map(paraGuardar) }
+                 : { lousa: true, W, H, itens: lista.map(paraGuardar) };
+  const t2 = JSON.stringify(anot);
+  if (t2 !== ultimaAnotTx) { ultimaAnotTx = t2; publicar('anotacoes', t2); }
+}
+
+// ----- quem assiste -----
+let estadoRemoto = null, anotRemota = null, pontasRemotas = [];
+const remoto = { a: null, carregando: null };
+function iniciarAssistir() {
+  document.body.classList.add('assistindo');
+  cameraVisivel = false; menuAberto = false;
+  el('status').hidden = true;
+  tela.style.pointerEvents = 'none';             // nem mouse nem toque mexem no quadro
+  aplicarCamadas();
+  const selo = el('aoVivo');
+  selo.hidden = false; selo.className = 'parado'; selo.textContent = 'Conectando…';
+  const es = new EventSource('/eventos');
+  es.onopen = () => { selo.className = ''; selo.textContent = 'Assistindo'; };
+  es.onerror = () => { selo.className = 'parado'; selo.textContent = 'Sem conexão. Tentando de novo…'; };
+  es.addEventListener('estado', e => { try { estadoRemoto = JSON.parse(e.data); } catch (x) { return; } aplicarEstadoRemoto(); });
+  es.addEventListener('anotacoes', e => { try { anotRemota = JSON.parse(e.data); } catch (x) { return; } aplicarAnotRemota(); });
+  addEventListener('resize', () => setTimeout(() => { aplicarEstadoRemoto(); aplicarAnotRemota(); }, 50));
+  recado('Aguardando quem apresenta…', 0);
+  requestAnimationFrame(quadro);
+}
+async function baixarArquivoRemoto(id, nome) {
+  if (remoto.carregando === id) return;
+  remoto.carregando = id;
+  recado('Abrindo ' + nome + '…', 0);
+  try {
+    const r = await fetch('/arquivo?id=' + encodeURIComponent(id), { cache: 'no-store' });
+    if (!r.ok) throw new Error('o arquivo ainda não chegou ao servidor');
+    const blob = await r.blob();
+    const res = await window.ModuloUpload.receber([new File([blob], nome, { type: blob.type })]);
+    if (!res.paginas.length) throw new Error(res.recusados[0] ? res.recusados[0].motivo : 'arquivo vazio');
+    remoto.a = { id, nome, caminho: nome, paginas: res.paginas };
+    apresentacoes = [remoto.a];
+    recado('', 0);
+  } catch (e) {
+    recado('Não consegui abrir ' + nome + ' (' + (e && e.message || 'erro') + '). Tentando de novo…', 0);
+    setTimeout(() => { remoto.carregando = null; aplicarEstadoRemoto(); }, 2000);
+    return;
+  }
+  remoto.carregando = null;
+  aplicarEstadoRemoto(); aplicarAnotRemota();
+}
+function aplicarEstadoRemoto() {
+  const s = estadoRemoto;
+  if (!s) return;
+  if (s.modo === 'pagina') {
+    if (!remoto.a || remoto.a.id !== s.id) {
+      if (!s.pronto) recado('Aguardando o arquivo ' + s.nome + '…', 0);
+      else baixarArquivoRemoto(s.id, s.nome);
+      pontasRemotas = []; return;
+    }
+    const mudou = paginas !== remoto.a.paginas || paginaAtual !== s.indice;
+    if (paginas !== remoto.a.paginas) abrirApresentacao(remoto.a);
+    if (paginaAtual !== s.indice) irParaPagina(s.indice);
+    const pg = paginas[paginaAtual], v = vistaAtual();
+    if (!pg || !v) return;
+    const [x, y, w, h] = s.ret, k = Math.min(W / w, H / h);     // o trecho que o apresentador vê, inteiro e centralizado
+    v.w = LARGURA_DOC * k; v.h = v.w * pg.altura / pg.largura;
+    v.x = (W - w * k) / 2 - x * k; v.y = (H - h * k) / 2 - y * k;
+    prenderPdf(v); estiloVista = '';             // força o contador e a posição a serem refeitos
+    pontasRemotas = (s.pontas || []).map(p => [v.x + p[0] * v.w / LARGURA_DOC, v.y + p[1] * v.w / LARGURA_DOC]);
+    if (mudou) aplicarAnotRemota();
+  } else {
+    if (paginaAtual >= 0) { fecharPaginas(); aplicarAnotRemota(); }
+    const k = Math.min(W / s.W, H / s.H), ox = (W - s.W * k) / 2, oy = (H - s.H * k) / 2;
+    pontasRemotas = (s.pontas || []).map(p => [ox + p[0] * k, oy + p[1] * k]);
+    if (!remoto.carregando) recado('', 0);
+  }
+  pedirDesenho();
+}
+function aplicarAnotRemota() {
+  const n = anotRemota;
+  if (!n) return;
+  if (n.lousa) {
+    if (paginaAtual >= 0) return;
+    const k = Math.min(W / n.W, H / n.H), ox = (W - n.W * k) / 2, oy = (H - n.H * k) / 2;
+    trocarItens(n.itens.map(it => transformarItem(clonarItem(it), x => ox + x * k, y => oy + y * k, k)));
+    chaveItens = null; return;
+  }
+  const pg = paginas[paginaAtual];
+  if (!pg || !remoto.a || paginas !== remoto.a.paginas || remoto.a.id !== n.id || paginaAtual !== n.indice) return;
+  pg.ancora = { x: 0, y: 0, w: LARGURA_DOC };      // chegam nas medidas do documento; seguirVista leva para a tela
+  trocarItens(n.itens.map(clonarItem));
+  aplicarVistaSlide(); chaveItens = null;
+}
+function desenharPontasRemotas() {               // as pontas dos indicadores de quem apresenta, como um apontador laser
+  for (const p of pontasRemotas) {
+    ctx.beginPath(); ctx.arc(p[0], p[1], 9 * K, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(229,32,43,0.85)'; ctx.fill(); ctx.lineWidth = 3 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  }
+}
+
+// ---------- lápis e marca-texto com mouse, toque e caneta ----------
+let tracoPonteiro = null;           // { id, traco, apagando } enquanto o ponteiro desenha ou apaga
+let panPonteiro = null;             // { ids, ultimo } com dois dedos na tela: rolam a página em vez de desenhar
+const toques = new Map();           // dedos na tela: id -> ponto
+function comecarTracoPonteiro(e, p) {
+  tela.setPointerCapture(e.pointerId);
+  if (e.button === 2 || e.button === 5) { tracoPonteiro = { id: e.pointerId, apagando: p }; apagar(p); return; }   // botão direito ou ponta de apagar da caneta
+  const traco = marcador ? { tipo: 'traco', cor, tam: larguraMarcador(tam), pontos: [p], marca: true } : { tipo: 'traco', cor, tam, pontos: [p] };
+  itens.push(traco);
+  tracoPonteiro = { id: e.pointerId, traco };
+  pedirDesenho();
+}
+function seguirTracoPonteiro(p) {
+  if (tracoPonteiro.apagando) {                 // apaga também no caminho entre um evento e outro, para o movimento rápido não pular traços
+    const a = tracoPonteiro.apagando, n = Math.ceil(dist(a, p) / (RAIO_BORRACHA / 2));
+    for (let k = 1; k <= n; k++) apagar([a[0] + (p[0] - a[0]) * k / n, a[1] + (p[1] - a[1]) * k / n]);
+    tracoPonteiro.apagando = p; return;
+  }
+  const pts = tracoPonteiro.traco.pontos, ult = pts[pts.length - 1];
+  if (dist(ult, p) >= 1.5) { pts.push(p); pedirDesenho(); }
+}
+// Guarda os dedos na tela; com o segundo dedo, o traço que o primeiro começava é desfeito e os dois passam a rolar a página.
+// Devolve true se o toque já foi tratado.
+function pontoDeToque(e, p) {
+  if (e.pointerType !== 'touch') return false;
+  toques.set(e.pointerId, p);
+  if (toques.size !== 2 || paginaAtual < 0) return false;
+  if (tracoPonteiro) {
+    if (tracoPonteiro.traco) { const i = itens.indexOf(tracoPonteiro.traco); if (i >= 0) itens.splice(i, 1); }
+    tracoPonteiro = null;
+  }
+  arrastePonteiro = null;
+  const ids = Array.from(toques.keys());
+  tela.setPointerCapture(e.pointerId);
+  panPonteiro = { ids, ultimo: meio(toques.get(ids[0]), toques.get(ids[1])) };
+  pedirDesenho();
+  return true;
+}
+function moverPan() {
+  const a = toques.get(panPonteiro.ids[0]), b = toques.get(panPonteiro.ids[1]), v = vistaAtual();
+  if (!a || !b || !v) return;
+  const c = meio(a, b);
+  v.x += c[0] - panPonteiro.ultimo[0]; v.y += c[1] - panPonteiro.ultimo[1];
+  panPonteiro.ultimo = c;
+  prenderPdf(v); pedirDesenho();
+}
+
 const pontoDoPonteiro = e => { const r = tela.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
 tela.addEventListener('pointerdown', e => {      // o mouse e o toque clicam nos botões, e arrastam ou redimensionam a imagem
   e.preventDefault();
   const p = pontoDoPonteiro(e);
+  if (pontoDeToque(e, p)) return;
+  // Com o lápis ligado e um slide ou PDF aberto, o mouse, o dedo e a caneta da tela desenham (botão direito apaga).
+  // Imagens soltas e a bolinha azul do canto continuam respondendo ao arraste.
+  if (canetaAtiva && paginaAtual >= 0 && !botaoEm(p[0], p[1]) && !imagemEm(p[0], p[1])) {
+    const canto = slideEm(p[0], p[1]);
+    if (!(canto && canto.modo === 'tamanho')) { comecarTracoPonteiro(e, p); return; }
+  }
   const alvo = botaoEm(p[0], p[1]) ? null : alvoEm(p[0], p[1]);
   if (alvo) {
     arrastePonteiro = pegarImagem(alvo, p);
@@ -2621,16 +3325,31 @@ tela.addEventListener('pointerdown', e => {      // o mouse e o toque clicam nos
   cliqueDoPonteiro = true;
   try { clicar(p[0], p[1]); } finally { cliqueDoPonteiro = false; }
 });
-tela.addEventListener('pointermove', e => { if (arrastePonteiro) moverImagem(arrastePonteiro, pontoDoPonteiro(e)); });
+tela.addEventListener('pointermove', e => {
+  const p = pontoDoPonteiro(e);
+  if (toques.has(e.pointerId)) toques.set(e.pointerId, p);
+  if (panPonteiro) { moverPan(); return; }
+  if (tracoPonteiro && tracoPonteiro.id === e.pointerId) { seguirTracoPonteiro(p); return; }
+  if (arrastePonteiro) moverImagem(arrastePonteiro, p);
+});
+tela.addEventListener('contextmenu', e => e.preventDefault());     // o botão direito apaga em vez de abrir o menu do navegador
 tela.addEventListener('wheel', e => {          // rodinha do mouse: zoom no slide, a partir do cursor
   const v = vistaAtual(); if (!v) return;
   e.preventDefault();
+  if (v.pdf && !e.ctrlKey) {                    // PDF: a rodinha rola, como num leitor; Ctrl + rodinha faz zoom
+    const px = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? H : W / (tela.clientWidth || W);
+    const dx = (e.shiftKey ? e.deltaY : e.deltaX) * px, dy = (e.shiftKey ? 0 : e.deltaY) * px;
+    v.x -= dx; rolarPdf(v, dy); return;
+  }
   const p = pontoDoPonteiro(e), k = Math.exp(-e.deltaY * 0.0015 * SENSIBILIDADE_TAMANHO / 0.46);
   const nw = Math.max(80 * K, v.w * k), f = nw / v.w;
   v.x = p[0] - (p[0] - v.x) * f; v.y = p[1] - (p[1] - v.y) * f; v.w = nw; v.h *= f;
   pedirDesenho();
 }, { passive: false });
-const soltarPonteiro = () => {
+const soltarPonteiro = e => {
+  toques.delete(e.pointerId);
+  if (panPonteiro && panPonteiro.ids.includes(e.pointerId)) { panPonteiro = null; return; }
+  if (tracoPonteiro && tracoPonteiro.id === e.pointerId) { normalizarTraco(tracoPonteiro.traco); tracoPonteiro = null; pedirDesenho(); return; }
   if (!arrastePonteiro) return;
   if (arrastePonteiro.modo === 'mover' && arrastePonteiro.item.tipo === 'imagem' && sobreLixeira(arrastePonteiro.ultimo)) jogarNaLixeira(arrastePonteiro.item);
   arrastePonteiro = null; pedirDesenho();
@@ -2658,12 +3377,23 @@ el('btProcessador').addEventListener('click', trocarProcessador);
 rotuloDuasMaos();
 addEventListener('keydown', e => {
   if (e.key === 'f' || e.key === 'F') telaCheia();
-  else if (paginaAtual >= 0 && (e.key === 'ArrowRight' || e.key === 'PageDown')) { e.preventDefault(); irParaPagina(paginaAtual + 1); }
-  else if (paginaAtual >= 0 && (e.key === 'ArrowLeft' || e.key === 'PageUp')) { e.preventDefault(); irParaPagina(paginaAtual - 1); }
+  else if (ASSISTIR) return;                    // quem assiste não controla nada
+  else if (paginaAtual >= 0 && (e.key === 'ArrowRight' || e.key === 'PageDown')) { e.preventDefault(); passarPagina(1); }
+  else if (paginaAtual >= 0 && (e.key === 'ArrowLeft' || e.key === 'PageUp')) { e.preventDefault(); passarPagina(-1); }
+  else if (vistaAtual() && vistaAtual().pdf && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === ' ')) {      // PDF: setas rolam um pouco; espaço, uma tela
+    e.preventDefault(); rolarPdf(vistaAtual(), (e.key === ' ' ? H * 0.85 * (e.shiftKey ? -1 : 1) : H * 0.12 * (e.key === 'ArrowUp' ? -1 : 1)));
+  }
+  else if (vistaAtual() && vistaAtual().pdf && (e.key === 'Home' || e.key === 'End')) { e.preventDefault(); rolarPdf(vistaAtual(), e.key === 'Home' ? -1e9 : 1e9); }
 });
-el('btAnt').addEventListener('click', () => irParaPagina(paginaAtual - 1));
-el('btProx').addEventListener('click', () => irParaPagina(paginaAtual + 1));
+el('btAnt').addEventListener('click', () => passarPagina(-1));
+el('btProx').addEventListener('click', () => passarPagina(1));
 el('btFechar').addEventListener('click', fecharPaginas);
+el('btBaixar').addEventListener('click', baixarPdfAnotado);
+if (ASSISTIR) iniciarAssistir();
+else {
+setInterval(salvarAnotacoes, 2000);
+addEventListener('pagehide', salvarAnotacoes);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') salvarAnotacoes(); });
 {
   window.ModuloUpload.ligar({
     botao: el('btEnviar'),
@@ -2674,13 +3404,21 @@ el('btFechar').addEventListener('click', fecharPaginas);
   });
 }
 el('abrir').addEventListener('click', abrirCamera);
-restaurarArquivos();
+carregarAnotacoes().then(restaurarArquivos);
+{
+  let transmitia = false;
+  try { transmitia = sessionStorage.getItem('quadro-no-ar.transmitindo') === '1'; } catch (e) { /* sem armazenamento */ }
+  if (transmitia) iniciarTransmissao();          // a transmissão só começa pelo botão (ou volta sozinha ao recarregar a aba que já transmitia)
+  // aberto pelo servidor (como no aplicativo instalado): avisa de vez em quando que o quadro está aberto, para o servidor não se desligar
+  if (PELO_SERVIDOR) setInterval(() => fetch('/servidor', { cache: 'no-store' }).catch(() => {}), 5 * 60 * 1000);
+}
 
 try {
   await carregarDetector();
   await abrirCamera();
 } catch (e) {
   aviso('Não consegui carregar o rastreador de mãos. Verifique a conexão com a internet e recarregue a página.', false);
+}
 }
 </script>
 </body>
