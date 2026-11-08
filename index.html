@@ -37,6 +37,29 @@
   #aoVivo[hidden] { display: none; }
   #aoVivo::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #e5202b; }
   #aoVivo.parado::before { background: #8a8f9c; }
+  /* gravação de tela: bolinha vermelha piscando enquanto grava */
+  #btGravar { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  #btGravar::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #e5202b; }
+  #btGravar.gravando { background: #a3161e; }
+  #btGravar.gravando::before { background: #fff; animation: piscaGravando 1s steps(2, start) infinite; }
+  @keyframes piscaGravando { to { visibility: hidden; } }
+  /* quem apresenta: lista de quem está assistindo, aberta ao clicar no selo "Ao vivo" */
+  #aoVivo.clicavel { cursor: pointer; }
+  #plateia { position: fixed; top: calc(58px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: min(320px, calc(100vw - 20px)); max-height: calc(100dvh - 70px - env(safe-area-inset-top, 0px)); overflow-y: auto; box-sizing: border-box;
+             background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 12px 16px; line-height: 1.5; z-index: 5; }
+  #plateia[hidden] { display: none; }
+  #plateia b { display: block; margin-bottom: 6px; }
+  #plateia ol { margin: 0; padding-left: 22px; }
+  #plateia li span { color: #8a8f9c; font-size: 0.85rem; margin-left: 6px; }
+  #plateia .vazio { color: #aeb5c6; margin: 0; }
+  /* quem assiste: pergunta o nome antes de entrar */
+  #nomeAssistir { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, 0.72); }
+  #nomeAssistir[hidden] { display: none; }
+  #nomeAssistir form { background: #ffffff; color: #111111; border-radius: 10px; padding: 20px; width: min(360px, 100%); box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
+  #nomeAssistir span { font-size: 0.9rem; color: #555b66; line-height: 1.4; }
+  #nomeAssistir input { font: inherit; font-size: 1.05rem; padding: 10px 12px; border: 1px solid #c9ced8; border-radius: 6px; color: #111111; background: #ffffff; }
+  #nomeAssistir input:focus { outline: 2px solid #1f5fe0; outline-offset: 1px; border-color: transparent; }
+  #nomeAssistir button { background: #1f5fe0; color: #ffffff; padding: 10px 14px; }
   /* QR Code para os outros aparelhos abrirem o endereço de assistir */
   #qr { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, 0.72); }
   #qr[hidden], #qr [hidden] { display: none !important; }
@@ -76,6 +99,7 @@
   <button id="btBaixar" type="button" hidden>Baixar PDF anotado</button>
   <button id="btFechar" type="button" hidden>Fechar slides</button>
   <button id="btEnviar" type="button">Enviar arquivo</button>
+  <button id="btGravar" type="button" title="Grava esta aba com o som do microfone e baixa o vídeo ao parar">Gravar</button>
   <button id="btAjuda" type="button">Ajuda</button>
   <button id="btCheia" type="button">Tela cheia</button>
 </div>
@@ -98,6 +122,8 @@
     <li><b>PDF:</b> envie pelo botão Enviar arquivo ou arraste para a janela; ele entra no carrossel como os slides e abre como num leitor de PDF: todas as páginas uma embaixo da outra, presas na largura da tela. Para rolar, arraste com a pinça (ou com o mouse), use a rodinha ou as setas ↑ ↓. O zoom é o mesmo do slide (duas pinças, bolinha azul ou Ctrl + rodinha), e o passador de slides, ◀ ▶ e as setas ← → pulam para a página seguinte ou anterior.</li>
     <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx, um PDF ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O quadro guarda no navegador uma cópia de cada imagem, .pptx e PDF enviado, com o caminho do arquivo, e reabre tudo ao recarregar, também no celular.</li>
     <li><b>Transmitir para a rede:</b> clique em Transmitir: o servidor da rede liga sozinho (depois de rodar <code>./instalar.sh</code> uma vez; sem isso, rode <code>node servidor.js</code>) e o QR Code abre. Os outros aparelhos da mesma rede leem o QR Code (ou abrem o endereço com o IP que aparece no selo "Ao vivo") e acompanham o arquivo, a página, a rolagem, o zoom, as anotações e o seu indicador, sem poder mexer em nada.</li>
+    <li><b>Gravar a aula:</b> clique em Gravar e, no aviso do navegador, escolha esta aba (no Chrome ela já vem sugerida; marque "Compartilhar áudio da guia" se quiser o som da página). Se o navegador pedir o microfone, permita para gravar sua voz. Grava tudo o que aparece: câmera, slides, PDF e anotações. Clique em Parar (ou em "Parar compartilhamento" do navegador) e o vídeo é baixado: MP4 quando o navegador consegue, senão WebM.</li>
+    <li><b>Quem está assistindo:</b> quem abre pelo QR Code digita o nome antes de entrar (dá para trocar tocando no selo "Assistindo"). Clique no selo "Ao vivo" para ver a lista com o nome de cada um e há quanto tempo está assistindo; quando alguém entra ou sai, aparece um aviso no canto. Os nomes só aparecem para quem apresenta.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
@@ -109,6 +135,17 @@
 </div>
 
 <div id="recado" hidden></div>
+
+<div id="plateia" hidden aria-live="polite"></div>
+
+<div id="nomeAssistir" hidden role="dialog" aria-label="Seu nome">
+  <form id="formNome">
+    <b>Como você se chama?</b>
+    <span>Quem apresenta vê o seu nome na lista de quem está assistindo.</span>
+    <input id="campoNome" type="text" maxlength="40" autocomplete="name" enterkeyhint="go" placeholder="Seu nome">
+    <button type="submit">Assistir</button>
+  </form>
+</div>
 
 <div id="qr" hidden role="dialog" aria-label="QR Code para assistir">
   <div class="cartao">
@@ -3047,11 +3084,54 @@ async function comecarTransmissao(abrirQr) {
   try { jaAbriu = sessionStorage.getItem('quadro-no-ar.qr-aberto') === '1'; sessionStorage.setItem('quadro-no-ar.qr-aberto', '1'); } catch (e) { /* sem armazenamento */ }
   if (abrirQr && !jaAbriu && enderecosDaRede.length) mostrarQr();
   const selo = el('aoVivo'), rede = enderecosDaRede[0];
-  const mostrar = n => { selo.hidden = false; selo.textContent = 'Ao vivo' + (rede ? ' · ' + rede.replace('http://', '') : '') + ' · ' + n + ' assistindo'; };
-  mostrar(info.assistindo || 0);
-  selo.title = 'Os outros aparelhos da rede assistem abrindo: ' + (info.enderecos || []).join(', ');
+  const mostrar = i => {
+    selo.hidden = false;
+    selo.textContent = 'Ao vivo' + (rede ? ' · ' + rede.replace('http://', '') : '') + ' · ' + (i.assistindo || 0) + ' assistindo';
+    atualizarPlateia(i.plateia || []);
+  };
+  mostrar(info);
+  selo.title = 'Clique para ver quem está assistindo. Os outros aparelhos da rede assistem abrindo: ' + (info.enderecos || []).join(', ');
+  selo.classList.add('clicavel');
+  selo.addEventListener('click', () => { el('plateia').hidden = !el('plateia').hidden; desenharPlateia(); });
   setInterval(transmitir, 80);
-  setInterval(() => fetch(BASE + '/servidor', { cache: 'no-store' }).then(r => r.json()).then(i => mostrar(i.assistindo || 0)).catch(() => {}), 4000);
+  setInterval(() => fetch(BASE + '/servidor', { cache: 'no-store' }).then(r => r.json()).then(mostrar).catch(() => {}), 4000);
+}
+// ----- quem está assistindo (só quem apresenta vê) -----
+let plateiaAtual = null;                          // null até a primeira resposta: quem já estava assistindo não gera aviso de "entrou"
+const nomeDaPlateia = p => p.nome || 'Sem nome';
+function atualizarPlateia(lista) {
+  if (plateiaAtual) {
+    const antes = new Map(plateiaAtual.map(p => [p.id, p])), agora = new Map(lista.map(p => [p.id, p]));
+    const entraram = lista.filter(p => !antes.has(p.id)).map(nomeDaPlateia);
+    const sairam = plateiaAtual.filter(p => !agora.has(p.id)).map(nomeDaPlateia);
+    const avisos = [];
+    if (entraram.length) avisos.push(entraram.join(', ') + (entraram.length === 1 ? ' entrou.' : ' entraram.'));
+    if (sairam.length) avisos.push(sairam.join(', ') + (sairam.length === 1 ? ' saiu.' : ' saíram.'));
+    if (avisos.length && el('recado').hidden) recado(avisos.join('\n'), 3000);    // não cobre um recado mais importante
+  }
+  plateiaAtual = lista;
+  desenharPlateia();
+}
+function desenharPlateia() {
+  const caixa = el('plateia');
+  if (caixa.hidden) return;
+  const lista = plateiaAtual || [];
+  const titulo = document.createElement('b');
+  titulo.textContent = lista.length ? lista.length + (lista.length === 1 ? ' pessoa assistindo' : ' pessoas assistindo') : 'Quem está assistindo';
+  if (!lista.length) {
+    const p = document.createElement('p'); p.className = 'vazio';
+    p.textContent = 'Ninguém assistindo ainda. Mostre o QR Code para os alunos entrarem.';
+    caixa.replaceChildren(titulo, p); return;
+  }
+  const ol = document.createElement('ol');
+  for (const p of lista) {
+    const li = document.createElement('li'), quando = document.createElement('span');
+    const min = Math.floor((Date.now() - p.desde) / 60000);
+    li.textContent = nomeDaPlateia(p);
+    quando.textContent = min < 1 ? 'agora' : 'há ' + (min < 60 ? min + ' min' : Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0'));
+    li.append(quando); ol.append(li);
+  }
+  caixa.replaceChildren(titulo, ol);
 }
 // ----- QR Code com o endereço de assistir -----
 const URL_QR = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
@@ -3177,11 +3257,41 @@ function iniciarAssistir() {
   aplicarCamadas();
   const selo = el('aoVivo');
   selo.hidden = false; selo.className = 'parado'; selo.textContent = 'Conectando…';
-  const es = new EventSource('/eventos');
-  es.onopen = () => { selo.className = ''; selo.textContent = 'Assistindo'; };
-  es.onerror = () => { selo.className = 'parado'; selo.textContent = 'Sem conexão. Tentando de novo…'; };
-  es.addEventListener('estado', e => { try { estadoRemoto = JSON.parse(e.data); } catch (x) { return; } aplicarEstadoRemoto(); });
-  es.addEventListener('anotacoes', e => { try { anotRemota = JSON.parse(e.data); } catch (x) { return; } aplicarAnotRemota(); });
+  // o nome e um código do aparelho ficam guardados: na próxima vez entra direto, e quem apresenta conta cada aparelho uma vez
+  let nome = '', aparelho = '';
+  try { nome = localStorage.getItem('quadro-no-ar.nome') || ''; aparelho = localStorage.getItem('quadro-no-ar.aparelho') || ''; } catch (e) { /* sem armazenamento */ }
+  if (!aparelho) {
+    aparelho = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+    try { localStorage.setItem('quadro-no-ar.aparelho', aparelho); } catch (e) { /* vale só nesta aba */ }
+  }
+  let es = null;
+  const conectar = () => {
+    if (es) es.close();
+    const rotulo = () => 'Assistindo' + (nome ? ' como ' + nome : '');
+    selo.className = 'parado clicavel'; selo.textContent = 'Conectando…';
+    es = new EventSource('/eventos?aparelho=' + encodeURIComponent(aparelho) + '&nome=' + encodeURIComponent(nome));
+    es.onopen = () => { selo.className = 'clicavel'; selo.textContent = rotulo(); };
+    es.onerror = () => { selo.className = 'parado clicavel'; selo.textContent = 'Sem conexão. Tentando de novo…'; };
+    es.addEventListener('estado', e => { try { estadoRemoto = JSON.parse(e.data); } catch (x) { return; } aplicarEstadoRemoto(); });
+    es.addEventListener('anotacoes', e => { try { anotRemota = JSON.parse(e.data); } catch (x) { return; } aplicarAnotRemota(); });
+  };
+  const perguntarNome = () => {
+    el('campoNome').value = nome;
+    el('nomeAssistir').hidden = false;
+    setTimeout(() => el('campoNome').focus(), 50);
+  };
+  el('formNome').addEventListener('submit', e => {
+    e.preventDefault();
+    const novo = el('campoNome').value.replace(/\s+/g, ' ').trim().slice(0, 40);
+    el('nomeAssistir').hidden = true;
+    if (novo === nome && es) return;
+    nome = novo;
+    try { localStorage.setItem('quadro-no-ar.nome', nome); } catch (x) { /* vale só nesta aba */ }
+    conectar();
+  });
+  selo.title = 'Toque para trocar o seu nome';
+  selo.addEventListener('click', perguntarNome);
+  if (nome) conectar(); else perguntarNome();
   addEventListener('resize', () => setTimeout(() => { aplicarEstadoRemoto(); aplicarAnotRemota(); }, 50));
   recado('Aguardando quem apresenta…', 0);
   requestAnimationFrame(quadro);
@@ -3356,6 +3466,79 @@ const soltarPonteiro = e => {
 };
 tela.addEventListener('pointerup', soltarPonteiro);
 tela.addEventListener('pointercancel', soltarPonteiro);
+// Gravação de tela: grava a própria aba (câmera, páginas e anotações como aparecem) com getDisplayMedia,
+// mistura o som da aba (se compartilhado) com o microfone e baixa o vídeo ao parar.
+const gravacao = { gravador: null, fluxos: [], audio: null, partes: [], tipo: '', inicio: 0, relogio: 0 };
+function rotuloGravacao() {
+  const b = el('btGravar'), ligado = !!gravacao.gravador;
+  b.classList.toggle('gravando', ligado);
+  if (!ligado) { b.textContent = 'Gravar'; return; }
+  const s = Math.floor((Date.now() - gravacao.inicio) / 1000);
+  b.textContent = 'Parar ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+async function alternarGravacao() {
+  if (gravacao.gravador) { gravacao.gravador.stop(); return; }
+  let tela;
+  try {
+    tela = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 30 }, audio: true,
+      preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude', systemAudio: 'include',
+    });
+  } catch (e) {
+    if (e && e.name !== 'NotAllowedError') recado('Não consegui começar a gravação (' + (e.message || e.name) + ').', 6000);
+    return;
+  }
+  const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).catch(() => null);
+  gravacao.fluxos = [tela, mic].filter(Boolean);
+  // o MediaRecorder grava uma faixa de áudio só: com som da aba e microfone, os dois são misturados
+  const faixasAudio = gravacao.fluxos.flatMap(f => f.getAudioTracks());
+  let audio = faixasAudio;
+  if (faixasAudio.length > 1) {
+    const ctx = new AudioContext(), destino = ctx.createMediaStreamDestination();
+    for (const f of faixasAudio) ctx.createMediaStreamSource(new MediaStream([f])).connect(destino);
+    gravacao.audio = ctx; audio = destino.stream.getAudioTracks();
+  }
+  const fluxo = new MediaStream([...tela.getVideoTracks(), ...audio]);
+  // MP4 só com H.264, que abre em qualquer player; sem ele, WebM (MP4 com VP9 dentro falha em muitos players)
+  gravacao.tipo = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+    .find(t => MediaRecorder.isTypeSupported(t)) || '';
+  let gravador;
+  try { gravador = new MediaRecorder(fluxo, gravacao.tipo ? { mimeType: gravacao.tipo, videoBitsPerSecond: 5e6 } : {}); }
+  catch (e) { encerrarFluxosGravacao(); recado('Este navegador não consegue gravar o vídeo (' + (e.message || e.name) + ').', 6000); return; }
+  gravacao.partes = [];
+  gravador.ondataavailable = e => { if (e.data && e.data.size) gravacao.partes.push(e.data); };
+  gravador.onstop = () => {
+    encerrarFluxosGravacao();
+    clearInterval(gravacao.relogio);
+    gravacao.gravador = null; rotuloGravacao();
+    const tipo = (gravador.mimeType || gravacao.tipo || 'video/webm').split(';')[0];
+    const blob = new Blob(gravacao.partes, { type: tipo });
+    gravacao.partes = [];
+    if (!blob.size) { recado('A gravação ficou vazia.', 4000); return; }
+    const d = new Date(), dois = n => String(n).padStart(2, '0');
+    const nome = 'aula-' + d.getFullYear() + '-' + dois(d.getMonth() + 1) + '-' + dois(d.getDate()) + '-' + dois(d.getHours()) + 'h' + dois(d.getMinutes())
+      + (tipo.includes('mp4') ? '.mp4' : '.webm');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    recado('Gravação baixada: ' + nome + ' (' + (blob.size / 1048576).toFixed(1).replace('.', ',') + ' MB).', 5000);
+  };
+  // o botão "Parar compartilhamento" do navegador também encerra a gravação
+  tela.getVideoTracks()[0].addEventListener('ended', () => { if (gravador.state !== 'inactive') gravador.stop(); });
+  gravacao.gravador = gravador;
+  gravacao.inicio = Date.now();
+  gravador.start(1000);
+  gravacao.relogio = setInterval(rotuloGravacao, 500);
+  rotuloGravacao();
+  recado(mic ? 'Gravando a tela com o microfone.' : 'Gravando a tela sem microfone (o navegador não liberou o microfone).', 3000);
+}
+function encerrarFluxosGravacao() {
+  for (const f of gravacao.fluxos) f.getTracks().forEach(t => t.stop());
+  gravacao.fluxos = [];
+  if (gravacao.audio) { gravacao.audio.close().catch(() => {}); gravacao.audio = null; }
+}
+addEventListener('beforeunload', e => { if (gravacao.gravador) { e.preventDefault(); e.returnValue = ''; } });  // não perder a gravação ao fechar
 function telaCheia() {
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen().catch(() => {});
@@ -3373,6 +3556,8 @@ aplicarCamadas();
 el('btCheia').addEventListener('click', telaCheia);
 el('btAjuda').addEventListener('click', () => { el('ajuda').hidden = !el('ajuda').hidden; leituraVisivel = !el('ajuda').hidden; });
 el('btDuasMaos').addEventListener('click', alternarDuasMaos);
+el('btGravar').addEventListener('click', alternarGravacao);
+if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !window.MediaRecorder) el('btGravar').hidden = true;  // celular e navegadores antigos
 el('btProcessador').addEventListener('click', trocarProcessador);
 rotuloDuasMaos();
 addEventListener('keydown', e => {

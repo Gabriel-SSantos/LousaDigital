@@ -29,13 +29,26 @@ const AUTOMATICO = process.argv.includes('--automatico');
 const OCIOSO_MAXIMO = 60 * 60 * 1000;         // no modo automático: encerra depois disso sem transmissão e sem ninguém assistindo
 let ultimaAtividade = Date.now();
 
-const assistindo = new Set();                 // respostas abertas de Server-Sent Events
+const assistindo = new Map();                 // resposta aberta de Server-Sent Events -> { aparelho, nome, desde }
 const ultimo = {};                            // tipo -> { seq, texto }: o último de cada tipo, para quem chega depois
 const arquivos = new Map();                   // id -> { nome, tipo, dados }
 
 const local = req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 // Páginas deste computador abertas por outro endereço (Live Server, file://) podem falar com o servidor; sites de fora, não
 const origemLocal = o => o === 'null' || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o || '');
+
+// nome que quem assiste digitou: sem caracteres de controle, espaços juntados, no máximo 40 caracteres
+const limparNome = n => String(n || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+// quem assiste, um por aparelho (a mesma pessoa com duas abas, ou reconectando, conta uma vez só)
+function plateia() {
+  const porAparelho = new Map();
+  for (const p of assistindo.values()) {
+    const ja = porAparelho.get(p.aparelho);
+    if (!ja) porAparelho.set(p.aparelho, { ...p });
+    else { ja.desde = Math.min(ja.desde, p.desde); if (p.nome) ja.nome = p.nome; }
+  }
+  return [...porAparelho.values()].sort((a, b) => a.desde - b.desde);
+}
 
 function enderecosNaRede() {
   const lista = [];
@@ -92,14 +105,17 @@ const servidor = http.createServer(async (req, res) => {
     }
     // o quadro pergunta se está neste servidor (e se pode apresentar)
     if (req.method === 'GET' && rota === '/servidor') {
-      return responder(res, 200, JSON.stringify({ quadro: true, apresentador: local(req), enderecos: enderecosNaRede(), assistindo: assistindo.size }), TIPOS['.json']);
+      return responder(res, 200, JSON.stringify({ quadro: true, apresentador: local(req), enderecos: enderecosNaRede(), assistindo: plateia().length,
+        // os nomes de quem assiste só vão para quem apresenta
+        ...(local(req) ? { plateia: plateia().map(p => ({ id: p.aparelho, nome: p.nome, desde: p.desde })) } : {}) }), TIPOS['.json']);
     }
     // quem assiste: fluxo de eventos com o estado do apresentador
     if (req.method === 'GET' && rota === '/eventos') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 2000\n\n');
       for (const tipo of ['estado', 'anotacoes']) if (ultimo[tipo]) enviarEvento(res, tipo, ultimo[tipo].texto);
-      assistindo.add(res);
+      const aparelho = String(url.searchParams.get('aparelho') || '').slice(0, 64) || ('anonimo-' + Math.random().toString(36).slice(2));
+      assistindo.set(res, { aparelho, nome: limparNome(url.searchParams.get('nome')), desde: Date.now() });
       req.on('close', () => assistindo.delete(res));
       return;
     }
@@ -120,8 +136,8 @@ const servidor = http.createServer(async (req, res) => {
       const texto = (await lerCorpo(req, LIMITE_ESTADO)).toString('utf8').replace(/\n/g, ' ');
       if (ultimo[tipo] && seq && seq < ultimo[tipo].seq) return responder(res, 200, 'antigo');   // chegou fora de ordem: já há um mais novo
       ultimo[tipo] = { seq, texto }; ultimaAtividade = Date.now();
-      for (const r of assistindo) enviarEvento(r, tipo, texto);
-      return responder(res, 200, JSON.stringify({ assistindo: assistindo.size }), TIPOS['.json']);
+      for (const r of assistindo.keys()) enviarEvento(r, tipo, texto);
+      return responder(res, 200, JSON.stringify({ assistindo: plateia().length }), TIPOS['.json']);
     }
     if (req.method === 'PUT' && rota === '/arquivo') {
       const id = url.searchParams.get('id');
@@ -148,7 +164,7 @@ const servidor = http.createServer(async (req, res) => {
 
 // mantém as conexões de quem assiste vivas (alguns roteadores e celulares fecham conexões paradas)
 setInterval(() => {
-  for (const r of assistindo) r.write(': ping\n\n');
+  for (const r of assistindo.keys()) r.write(': ping\n\n');
   if (assistindo.size) ultimaAtividade = Date.now();
   if (AUTOMATICO && Date.now() - ultimaAtividade > OCIOSO_MAXIMO) { console.log('Uma hora sem transmissão: encerrando.'); process.exit(0); }
 }, 20000);
