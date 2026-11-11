@@ -28,6 +28,12 @@ const ARQUIVOS_GUARDADOS = 6;                 // arquivos enviados que ficam na 
 const AUTOMATICO = process.argv.includes('--automatico');
 const OCIOSO_MAXIMO = 60 * 60 * 1000;         // no modo automático: encerra depois disso sem transmissão e sem ninguém assistindo
 let ultimaAtividade = Date.now();
+// A sala só existe enquanto o apresentador transmite: ele avisa a cada poucos segundos (e a cada publicação).
+// Sem aviso por esse tempo (aba fechada, computador dormindo), a sala acaba: quem assiste sai e o último estado é apagado,
+// para ninguém entrar depois numa sala que já não existe.
+const SEM_APRESENTADOR = 90 * 1000;           // longo o bastante para a aba do apresentador em segundo plano (o navegador atrasa os timers)
+const ENCERRAR_AO_FECHAR = 10 * 1000;         // ao fechar ou recarregar a aba do apresentador: se ele não voltar nesse tempo, a sala acaba
+let apresentadorVisto = 0, salaAberta = false, sessao = 0;
 
 const assistindo = new Map();                 // resposta aberta de Server-Sent Events -> { aparelho, nome, desde }
 const ultimo = {};                            // tipo -> { seq, texto }: o último de cada tipo, para quem chega depois
@@ -48,6 +54,17 @@ function plateia() {
     else { ja.desde = Math.min(ja.desde, p.desde); if (p.nome) ja.nome = p.nome; }
   }
   return [...porAparelho.values()].sort((a, b) => a.desde - b.desde);
+}
+
+const salaAtiva = () => Date.now() - apresentadorVisto < SEM_APRESENTADOR;
+function marcarApresentador() {
+  if (!salaAberta) { salaAberta = true; sessao++; }     // sala nova: o apresentador vê a sessão mudar e publica tudo de novo
+  apresentadorVisto = Date.now();
+}
+function encerrarSala() {
+  salaAberta = false; apresentadorVisto = 0;
+  for (const tipo of Object.keys(ultimo)) delete ultimo[tipo];
+  for (const r of assistindo.keys()) enviarEvento(r, 'encerrada', '{}');
 }
 
 function enderecosNaRede() {
@@ -104,16 +121,20 @@ const servidor = http.createServer(async (req, res) => {
       return responder(res, 200, fs.readFileSync(path.join(PASTA, 'index.html')), TIPOS['.html']);
     }
     // o quadro pergunta se está neste servidor (e se pode apresentar)
+    // ?transmitindo=1 (só deste computador) é o aviso periódico do apresentador de que a sala continua aberta
     if (req.method === 'GET' && rota === '/servidor') {
+      if (local(req) && url.searchParams.get('transmitindo') === '1') marcarApresentador();
       return responder(res, 200, JSON.stringify({ quadro: true, apresentador: local(req), enderecos: enderecosNaRede(), assistindo: plateia().length,
-        // os nomes de quem assiste só vão para quem apresenta
-        ...(local(req) ? { plateia: plateia().map(p => ({ id: p.aparelho, nome: p.nome, desde: p.desde })) } : {}) }), TIPOS['.json']);
+        sala: salaAtiva(), sessao,
+        // os nomes de quem assiste e os arquivos guardados só vão para quem apresenta
+        ...(local(req) ? { plateia: plateia().map(p => ({ id: p.aparelho, nome: p.nome, desde: p.desde })), arquivos: [...arquivos.keys()] } : {}) }), TIPOS['.json']);
     }
     // quem assiste: fluxo de eventos com o estado do apresentador
     if (req.method === 'GET' && rota === '/eventos') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 2000\n\n');
-      for (const tipo of ['estado', 'anotacoes']) if (ultimo[tipo]) enviarEvento(res, tipo, ultimo[tipo].texto);
+      if (!salaAtiva()) enviarEvento(res, 'encerrada', '{}');      // ninguém apresentando: não há sala para entrar
+      else for (const tipo of ['estado', 'anotacoes']) if (ultimo[tipo]) enviarEvento(res, tipo, ultimo[tipo].texto);
       const aparelho = String(url.searchParams.get('aparelho') || '').slice(0, 64) || ('anonimo-' + Math.random().toString(36).slice(2));
       assistindo.set(res, { aparelho, nome: limparNome(url.searchParams.get('nome')), desde: Date.now() });
       req.on('close', () => assistindo.delete(res));
@@ -135,9 +156,15 @@ const servidor = http.createServer(async (req, res) => {
       if (tipo !== 'estado' && tipo !== 'anotacoes') return responder(res, 400, 'tipo desconhecido');
       const texto = (await lerCorpo(req, LIMITE_ESTADO)).toString('utf8').replace(/\n/g, ' ');
       if (ultimo[tipo] && seq && seq < ultimo[tipo].seq) return responder(res, 200, 'antigo');   // chegou fora de ordem: já há um mais novo
+      marcarApresentador();
       ultimo[tipo] = { seq, texto }; ultimaAtividade = Date.now();
       for (const r of assistindo.keys()) enviarEvento(r, tipo, texto);
       return responder(res, 200, JSON.stringify({ assistindo: plateia().length }), TIPOS['.json']);
+    }
+    // a aba do apresentador foi fechada ou recarregada: a sala acaba em poucos segundos, a menos que ele volte a transmitir
+    if (req.method === 'POST' && rota === '/encerrar') {
+      if (salaAberta) apresentadorVisto = Math.min(apresentadorVisto, Date.now() - SEM_APRESENTADOR + ENCERRAR_AO_FECHAR);
+      return responder(res, 200, 'ok');
     }
     if (req.method === 'PUT' && rota === '/arquivo') {
       const id = url.searchParams.get('id');
@@ -168,6 +195,7 @@ setInterval(() => {
   if (assistindo.size) ultimaAtividade = Date.now();
   if (AUTOMATICO && Date.now() - ultimaAtividade > OCIOSO_MAXIMO) { console.log('Uma hora sem transmissão: encerrando.'); process.exit(0); }
 }, 20000);
+setInterval(() => { if (salaAberta && !salaAtiva()) encerrarSala(); }, 2000);
 
 servidor.listen(PORTA, '0.0.0.0', () => {
   const rede = enderecosNaRede();

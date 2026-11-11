@@ -32,7 +32,7 @@
             background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 10px 14px; line-height: 1.45; white-space: pre-line; }
   #recado[hidden] { display: none; }
   /* quem assiste pela rede: sem botões de controle, só o selo "assistindo", o contador de páginas e Tela cheia */
-  body.assistindo .barra > :not(#aoVivo):not(#contador):not(#btCheia) { display: none !important; }
+  body.assistindo .barra > :not(#aoVivo):not(#contador):not(#btCheia):not(#btSair) { display: none !important; }
   #aoVivo { display: inline-flex; align-items: center; gap: 6px; }
   #aoVivo[hidden] { display: none; }
   #aoVivo::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #e5202b; }
@@ -60,6 +60,14 @@
   #nomeAssistir input { font: inherit; font-size: 1.05rem; padding: 10px 12px; border: 1px solid #c9ced8; border-radius: 6px; color: #111111; background: #ffffff; }
   #nomeAssistir input:focus { outline: 2px solid #1f5fe0; outline-offset: 1px; border-color: transparent; }
   #nomeAssistir button { background: #1f5fe0; color: #ffffff; padding: 10px 14px; }
+  /* quem assiste, fora da sala: depois de sair, quando a apresentação acaba ou quando ninguém está apresentando */
+  #saguao { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: #0e1016; }
+  #saguao[hidden] { display: none; }
+  #saguao .cartao { background: #ffffff; color: #111111; border-radius: 10px; padding: 20px; width: min(380px, 100%); box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; line-height: 1.45; }
+  #saguao span { font-size: 0.95rem; color: #555b66; }
+  #saguao span[hidden] { display: none; }
+  #saguao button { background: #1f5fe0; color: #ffffff; padding: 10px 14px; }
+  #saguao button:disabled { background: #c9ced8; color: #555b66; cursor: default; }
   /* QR Code para os outros aparelhos abrirem o endereço de assistir */
   #qr { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, 0.72); }
   #qr[hidden], #qr [hidden] { display: none !important; }
@@ -102,6 +110,7 @@
   <button id="btGravar" type="button" title="Grava esta aba com o som do microfone e baixa o vídeo ao parar">Gravar</button>
   <button id="btAjuda" type="button">Ajuda</button>
   <button id="btCheia" type="button">Tela cheia</button>
+  <button id="btSair" type="button" hidden>Sair da sala</button>
 </div>
 
 <div id="ajuda" hidden>
@@ -123,7 +132,7 @@
     <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx, um PDF ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O quadro guarda no navegador uma cópia de cada imagem, .pptx e PDF enviado, com o caminho do arquivo, e reabre tudo ao recarregar, também no celular.</li>
     <li><b>Transmitir para a rede:</b> clique em Transmitir: o servidor da rede liga sozinho (depois de rodar <code>./instalar.sh</code> uma vez; sem isso, rode <code>node servidor.js</code>) e o QR Code abre. Os outros aparelhos da mesma rede leem o QR Code (ou abrem o endereço com o IP que aparece no selo "Ao vivo") e acompanham o arquivo, a página, a rolagem, o zoom, as anotações e o seu indicador, sem poder mexer em nada.</li>
     <li><b>Gravar a aula:</b> clique em Gravar e, no aviso do navegador, escolha esta aba (no Chrome ela já vem sugerida; marque "Compartilhar áudio da guia" se quiser o som da página). Se o navegador pedir o microfone, permita para gravar sua voz. Grava tudo o que aparece: câmera, slides, PDF e anotações. Clique em Parar (ou em "Parar compartilhamento" do navegador) e o vídeo é baixado: MP4 quando o navegador consegue, senão WebM.</li>
-    <li><b>Quem está assistindo:</b> quem abre pelo QR Code digita o nome antes de entrar (dá para trocar tocando no selo "Assistindo"). Clique no selo "Ao vivo" para ver a lista com o nome de cada um e há quanto tempo está assistindo; quando alguém entra ou sai, aparece um aviso no canto. Os nomes só aparecem para quem apresenta.</li>
+    <li><b>Quem está assistindo:</b> quem abre pelo QR Code digita o nome antes de entrar (dá para trocar tocando no selo "Assistindo"). Clique no selo "Ao vivo" para ver a lista com o nome de cada um e há quanto tempo está assistindo; quando alguém entra ou sai, aparece um aviso no canto. Os nomes só aparecem para quem apresenta. Quem assiste sai pelo botão Sair da sala; quando a transmissão acaba, todos saem sozinhos e ninguém entra numa sala que não está mais no ar.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
@@ -145,6 +154,15 @@
     <input id="campoNome" type="text" maxlength="40" autocomplete="name" enterkeyhint="go" placeholder="Seu nome">
     <button type="submit">Assistir</button>
   </form>
+</div>
+
+<div id="saguao" hidden role="dialog" aria-label="Fora da sala">
+  <div class="cartao">
+    <b id="saguaoTitulo">Nenhuma sala ativa</b>
+    <span id="saguaoTexto"></span>
+    <span id="saguaoUltima" hidden></span>
+    <button id="btEntrar" type="button" disabled>Entrar na sala</button>
+  </div>
 </div>
 
 <div id="qr" hidden role="dialog" aria-label="QR Code para assistir">
@@ -1118,10 +1136,20 @@ const ctxTela = tela.getContext('2d');
 let ctx = ctxTela;                  // as funções de desenho usam `ctx`; ele aponta para a lousa ou para uma das imagens guardadas (ver quadro)
 const el = id => document.getElementById(id);
 // Pelo servidor da rede (servidor.js), quem abre pelo IP da rede só assiste; quem abre neste computador (localhost) apresenta.
-// ?assistir ou ?apresentar no endereço forçam um ou outro.
+// ?assistir ou ?apresentar no endereço forçam um ou outro. Só assiste quem abriu a página pelo próprio servidor do quadro
+// (o QR Code ou o IP dele): o quadro publicado num site comum (GitHub Pages, Live Server...) abre sempre para apresentar.
 const PARAMETROS = new URLSearchParams(location.search);
 const PELO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
-const ASSISTIR = PELO_SERVIDOR && (PARAMETROS.has('assistir') || (!PARAMETROS.has('apresentar') && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)));
+const QUER_ASSISTIR = PELO_SERVIDOR && (PARAMETROS.has('assistir') || (!PARAMETROS.has('apresentar') && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)));
+async function infoDoServidor() {
+  try {
+    const r = await fetch('/servidor', { cache: 'no-store', ...(AbortSignal.timeout ? { signal: AbortSignal.timeout(4000) } : {}) });
+    const info = r.ok ? await r.json() : null;
+    return info && info.quadro ? info : null;
+  } catch (e) { return null; }
+}
+const INFO_INICIAL = QUER_ASSISTIR ? await infoDoServidor() : null;
+const ASSISTIR = !!INFO_INICIAL;
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const meio = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 
@@ -3094,7 +3122,18 @@ async function comecarTransmissao(abrirQr) {
   selo.classList.add('clicavel');
   selo.addEventListener('click', () => { el('plateia').hidden = !el('plateia').hidden; desenharPlateia(); });
   setInterval(transmitir, 80);
-  setInterval(() => fetch(BASE + '/servidor', { cache: 'no-store' }).then(r => r.json()).then(mostrar).catch(() => {}), 4000);
+  // avisa o servidor de que a sala continua aberta; se ela tinha acabado (ou o servidor reiniciou), publica tudo de novo
+  const avisar = () => fetch(BASE + '/servidor?transmitindo=1', { cache: 'no-store' }).then(r => r.json()).then(i => { conferirSessao(i); mostrar(i); }).catch(() => {});
+  avisar(); setInterval(avisar, 4000);
+  // fechou ou recarregou a aba: a sala acaba logo, a menos que a aba volte a transmitir em seguida
+  addEventListener('pagehide', () => { try { navigator.sendBeacon(BASE + '/encerrar'); } catch (e) { /* a sala acaba sozinha */ } });
+}
+let sessaoTx = null;
+function conferirSessao(i) {
+  if (!i) return;
+  if (Array.isArray(i.arquivos)) for (const [id, st] of enviados) if (st === 'ok' && !i.arquivos.includes(id)) enviados.delete(id);  // o servidor não tem mais: envia de novo
+  if (sessaoTx !== null && i.sessao !== sessaoTx) { ultimoEstadoTx = ''; ultimaAnotTx = ''; }
+  sessaoTx = i.sessao;
 }
 // ----- quem está assistindo (só quem apresenta vê) -----
 let plateiaAtual = null;                          // null até a primeira resposta: quem já estava assistindo não gera aviso de "entrou"
@@ -3270,7 +3309,11 @@ function iniciarAssistir() {
     const rotulo = () => 'Assistindo' + (nome ? ' como ' + nome : '');
     selo.className = 'parado clicavel'; selo.textContent = 'Conectando…';
     es = new EventSource('/eventos?aparelho=' + encodeURIComponent(aparelho) + '&nome=' + encodeURIComponent(nome));
-    es.onopen = () => { selo.className = 'clicavel'; selo.textContent = rotulo(); };
+    es.onopen = () => {
+      selo.className = 'clicavel'; selo.textContent = rotulo();
+      try { localStorage.setItem(CHAVE_ULTIMA_SALA, JSON.stringify({ endereco: location.host, quando: Date.now() })); } catch (e) { /* sem armazenamento */ }
+    };
+    es.addEventListener('encerrada', () => { es.close(); irParaSaguao('encerrada'); });
     es.onerror = () => { selo.className = 'parado clicavel'; selo.textContent = 'Sem conexão. Tentando de novo…'; };
     es.addEventListener('estado', e => { try { estadoRemoto = JSON.parse(e.data); } catch (x) { return; } aplicarEstadoRemoto(); });
     es.addEventListener('anotacoes', e => { try { anotRemota = JSON.parse(e.data); } catch (x) { return; } aplicarAnotRemota(); });
@@ -3291,10 +3334,51 @@ function iniciarAssistir() {
   });
   selo.title = 'Toque para trocar o seu nome';
   selo.addEventListener('click', perguntarNome);
+  el('btSair').hidden = false;
+  el('btSair').addEventListener('click', () => { if (es) es.close(); irParaSaguao('saiu'); });
   if (nome) conectar(); else perguntarNome();
   addEventListener('resize', () => setTimeout(() => { aplicarEstadoRemoto(); aplicarAnotRemota(); }, 50));
   recado('Aguardando quem apresenta…', 0);
   requestAnimationFrame(quadro);
+}
+// ----- fora da sala -----
+// O saguão tem endereço próprio (?saguao=motivo): recarregar a página não põe ninguém de volta na sala.
+const CHAVE_ULTIMA_SALA = 'quadro-no-ar.ultima-sala';
+function irParaSaguao(motivo) {
+  const p = new URLSearchParams(location.search); p.set('saguao', motivo);
+  location.replace(location.pathname + '?' + p);
+}
+function entrarNaSala() {
+  const p = new URLSearchParams(location.search); p.delete('saguao');
+  const q = String(p);
+  location.replace(location.pathname + (q ? '?' + q : ''));
+}
+function iniciarSaguao(motivo) {
+  document.body.classList.add('assistindo');
+  cameraVisivel = false; menuAberto = false;
+  el('status').hidden = true;
+  tela.style.pointerEvents = 'none';
+  aplicarCamadas();
+  el('saguaoTitulo').textContent = motivo === 'saiu' ? 'Você saiu da sala' : motivo === 'encerrada' ? 'A apresentação terminou' : 'Nenhuma sala ativa';
+  let ultima = null;
+  try { ultima = JSON.parse(localStorage.getItem(CHAVE_ULTIMA_SALA) || 'null'); } catch (e) { /* sem armazenamento */ }
+  if (ultima && ultima.endereco === location.host) {
+    const min = Math.floor((Date.now() - ultima.quando) / 60000);
+    el('saguaoUltima').textContent = 'Última sala: ' + ultima.endereco + ' · ' + (min < 1 ? 'agora há pouco' : 'há ' + (min < 60 ? min + ' min' : Math.floor(min / 60) + ' h'));
+    el('saguaoUltima').hidden = false;
+    el('btEntrar').textContent = 'Entrar na última sala';
+  }
+  const mostrar = info => {
+    const aberta = !!(info && info.sala);
+    el('btEntrar').disabled = !aberta;
+    el('saguaoTexto').textContent = !info ? 'Sem conexão com ' + location.host + '. O computador de quem apresenta está ligado e na mesma rede?'
+      : aberta ? 'Há uma apresentação no ar em ' + location.host + '.'
+      : 'Ninguém está apresentando em ' + location.host + ' agora. O botão libera sozinho quando a apresentação começar.';
+  };
+  mostrar(INFO_INICIAL);
+  el('btEntrar').addEventListener('click', entrarNaSala);
+  setInterval(() => infoDoServidor().then(mostrar), 3000);
+  el('saguao').hidden = false;
 }
 async function baixarArquivoRemoto(id, nome) {
   if (remoto.carregando === id) return;
@@ -3574,7 +3658,12 @@ el('btAnt').addEventListener('click', () => passarPagina(-1));
 el('btProx').addEventListener('click', () => passarPagina(1));
 el('btFechar').addEventListener('click', fecharPaginas);
 el('btBaixar').addEventListener('click', baixarPdfAnotado);
-if (ASSISTIR) iniciarAssistir();
+if (ASSISTIR) {
+  // só entra direto quando há uma apresentação no ar e a pessoa não acabou de sair
+  if (PARAMETROS.has('saguao')) iniciarSaguao(PARAMETROS.get('saguao'));
+  else if (!INFO_INICIAL.sala) iniciarSaguao('vazia');
+  else iniciarAssistir();
+}
 else {
 setInterval(salvarAnotacoes, 2000);
 addEventListener('pagehide', salvarAnotacoes);
