@@ -188,8 +188,9 @@ const servidor = http.createServer(async (req, res) => {
   const apresentador = !!sala && (WEB ? tokenConfere(sala, url.searchParams.get('token')) : local(req));
   try {
     // a página do quadro: para todos
-    if (req.method === 'GET' && (rota === '/' || rota === '/index.html')) {
-      let pagina = fs.readFileSync(path.join(PASTA, 'index.html'), 'utf8');
+    // (no repositório, index.html é o site de apresentação do GitHub Pages; o quadro é a lousa.html)
+    if (req.method === 'GET' && (rota === '/' || rota === '/index.html' || rota === '/lousa.html')) {
+      let pagina = fs.readFileSync(path.join(PASTA, 'lousa.html'), 'utf8');
       if (TEM_BIBLIOTECAS) pagina = pagina.replace('<head>', '<head><script>window.QUADRO_BIBLIOTECAS = true</script>');   // a página usa a cópia local
       return responder(res, 200, pagina, TIPOS['.html']);
     }

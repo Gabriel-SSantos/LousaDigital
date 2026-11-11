@@ -24,7 +24,7 @@
     "directories": { "output": "dist" },
     "files": ["main.js", "icone.png"],
     "extraResources": [
-      { "from": "../index.html", "to": "quadro/index.html" },
+      { "from": "../lousa.html", "to": "quadro/lousa.html" },
       { "from": "../servidor.js", "to": "quadro/servidor.js" },
       { "from": "../bibliotecas", "to": "quadro/bibliotecas" }
     ],

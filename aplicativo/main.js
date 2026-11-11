@@ -9,7 +9,7 @@
 const { app, BrowserWindow, session, shell, dialog } = require('electron');
 const path = require('path');
 
-// index.html e servidor.js: ao lado do aplicativo no instalador (resources/quadro); na pasta de cima em desenvolvimento
+// lousa.html e servidor.js: ao lado do aplicativo no instalador (resources/quadro); na pasta de cima em desenvolvimento
 const PASTA_QUADRO = app.isPackaged ? path.join(process.resourcesPath, 'quadro') : path.join(__dirname, '..');
 const PORTAS = [8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089];
 

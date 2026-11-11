@@ -6,7 +6,7 @@
 #                              os desenhos e arquivos guardados no navegador continuam lá
 #
 # O que é instalado:
-#   ~/.local/share/quadro-no-ar/         cópia do quadro (index.html, servidor.js) e o desinstalador
+#   ~/.local/share/quadro-no-ar/         cópia do quadro (lousa.html, servidor.js) e o desinstalador
 #   ~/.local/bin/quadro-no-ar            comando que liga o servidor e abre o quadro numa janela própria do navegador
 #   menu de aplicativos e área de trabalho   ícone "Quadro no Ar"
 #   endereço quadronoar://               deixa o botão Transmitir ligar o servidor sozinho
@@ -41,7 +41,7 @@ remover() {
 if [[ "${1:-}" == "--remover" || "$(basename "$0")" == "desinstalar.sh" ]]; then remover; exit 0; fi
 
 # ---------- verificações ----------
-for arq in index.html servidor.js; do
+for arq in lousa.html servidor.js; do
   [[ -f "$ORIGEM/$arq" ]] || { echo "Não encontrei $arq ao lado do instalador ($ORIGEM)." >&2; exit 1; }
 done
 NODE="$(command -v node || true)"
@@ -57,7 +57,7 @@ fi
 
 # ---------- cópia do aplicativo ----------
 mkdir -p "$DESTINO" "$BIN" "$APLICATIVOS" "$(dirname "$ICONE")"
-cp "$ORIGEM/index.html" "$ORIGEM/servidor.js" "$DESTINO/"
+cp "$ORIGEM/lousa.html" "$ORIGEM/servidor.js" "$DESTINO/"
 # cópia das bibliotecas (node aplicativo/baixar-bibliotecas.js): com ela, o quadro funciona sem internet
 rm -rf "$DESTINO/bibliotecas"
 [[ -d "$ORIGEM/bibliotecas" ]] && cp -r "$ORIGEM/bibliotecas" "$DESTINO/"
