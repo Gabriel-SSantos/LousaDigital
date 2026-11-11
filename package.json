@@ -1,0 +1,12 @@
+{
+  "name": "quadro-no-ar",
+  "private": true,
+  "description": "Lousa digital com gestos e transmissão. 'npm start' sobe o servidor no modo web (hospedagem); na rede local use 'node servidor.js'.",
+  "scripts": {
+    "start": "node servidor.js --web",
+    "local": "node servidor.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

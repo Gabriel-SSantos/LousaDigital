@@ -58,6 +58,9 @@ fi
 # ---------- cópia do aplicativo ----------
 mkdir -p "$DESTINO" "$BIN" "$APLICATIVOS" "$(dirname "$ICONE")"
 cp "$ORIGEM/index.html" "$ORIGEM/servidor.js" "$DESTINO/"
+# cópia das bibliotecas (node aplicativo/baixar-bibliotecas.js): com ela, o quadro funciona sem internet
+rm -rf "$DESTINO/bibliotecas"
+[[ -d "$ORIGEM/bibliotecas" ]] && cp -r "$ORIGEM/bibliotecas" "$DESTINO/"
 cp "$ORIGEM/instalar.sh" "$DESTINO/desinstalar.sh"
 chmod +x "$DESTINO/desinstalar.sh"
 rm -f "$DADOS/quadro-no-ar/iniciar-servidor.sh"          # lançador da versão anterior do instalador

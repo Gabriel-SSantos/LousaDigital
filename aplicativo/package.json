@@ -1,0 +1,55 @@
+{
+  "name": "quadro-no-ar",
+  "productName": "Quadro no Ar",
+  "version": "1.0.0",
+  "description": "Lousa digital com gestos, slides e PDF, que transmite para os aparelhos da rede da sala",
+  "author": "Gabriel Santos <gabr.santos.14@gmail.com>",
+  "homepage": "https://github.com/Gabriel-SSantos/LousaDigital",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "bibliotecas": "node baixar-bibliotecas.js",
+    "dist:win": "node baixar-bibliotecas.js && electron-builder --win --publish never",
+    "dist:linux": "node baixar-bibliotecas.js && electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "io.github.gabrielssantos.quadronoar",
+    "productName": "Quadro no Ar",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "icone.png"],
+    "extraResources": [
+      { "from": "../index.html", "to": "quadro/index.html" },
+      { "from": "../servidor.js", "to": "quadro/servidor.js" },
+      { "from": "../bibliotecas", "to": "quadro/bibliotecas" }
+    ],
+    "protocols": [{ "name": "Quadro no Ar", "schemes": ["quadronoar"] }],
+    "icon": "icone.png",
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "Quadro-no-Ar-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Quadro no Ar",
+      "include": "instalador.nsh",
+      "runAfterFinish": true
+    },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] }],
+      "category": "Education",
+      "artifactName": "Quadro-no-Ar.${ext}",
+      "synopsis": "Lousa digital que transmite para a rede da sala",
+      "desktop": { "entry": { "Keywords": "lousa;quadro;pdf;slides;apresentação;" } }
+    },
+    "deb": { "maintainer": "Gabriel Santos <gabr.santos.14@gmail.com>" }
+  }
+}

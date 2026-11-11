@@ -6,6 +6,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Quadro no Ar</title>
+<script>
+  // Bibliotecas de fora (leitor de PDF, .pptx, QR Code, rastreador de mãos): vêm dos CDNs. No aplicativo instalável, que
+  // funciona sem internet, o servidor tem uma cópia delas e avisa marcando window.QUADRO_BIBLIOTECAS antes deste script.
+  window.biblioteca = url => window.QUADRO_BIBLIOTECAS ? '/bibliotecas/' + url.replace(/^https:\/\//, '') : url;
+</script>
 <style>
   :root { color-scheme: dark; }
   html, body { height: 100%; overscroll-behavior: none; }
@@ -68,6 +73,10 @@
   #saguao span[hidden] { display: none; }
   #saguao button { background: #1f5fe0; color: #ffffff; padding: 10px 14px; }
   #saguao button:disabled { background: #c9ced8; color: #555b66; cursor: default; }
+  #saguao button.secundario { background: #eef0f5; color: #111111; }
+  #saguao input { font: inherit; font-size: 1.2rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 10px 12px; border: 1px solid #c9ced8; border-radius: 6px; color: #111111; background: #ffffff; }
+  #saguao input:focus { outline: 2px solid #1f5fe0; outline-offset: 1px; border-color: transparent; }
+  #saguao [hidden] { display: none; }
   /* QR Code para os outros aparelhos abrirem o endereço de assistir */
   #qr { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, 0.72); }
   #qr[hidden], #qr [hidden] { display: none !important; }
@@ -78,6 +87,15 @@
   #qr .outros button { background: #eef0f5; color: #111111; font-weight: 500; font-size: 0.85rem; padding: 6px 10px; }
   #qr .outros button.atual { background: #1f5fe0; color: #ffffff; }
   #qr .fechar { background: #111111; color: #ffffff; }
+  /* baixar o aplicativo instalável */
+  #baixarApp { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, 0.72); }
+  #baixarApp[hidden], #baixarApp [hidden] { display: none !important; }
+  #baixarApp .cartao { background: #ffffff; color: #111111; border-radius: 10px; padding: 20px; width: min(420px, 100%); box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; line-height: 1.45; }
+  #baixarApp span { color: #555b66; font-size: 0.92rem; }
+  #baixarApp .outros { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+  #baixarApp .fechar { background: #111111; color: #ffffff; }
+  a.acao, button.acao { display: block; text-align: center; background: #1f5fe0; color: #ffffff; text-decoration: none; border-radius: 6px; padding: 10px 14px; font-weight: 600; }
+  #baixarApp a:not(.acao), #qr a:not(.acao) { color: #1f5fe0; }
   #ajuda { position: fixed; top: calc(58px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: min(400px, calc(100vw - 20px)); max-height: calc(100vh - 70px); max-height: calc(100dvh - 70px - env(safe-area-inset-top, 0px)); overflow-y: auto; box-sizing: border-box; background: rgba(20, 23, 32, 0.94); border-radius: 6px; padding: 14px 16px; line-height: 1.55; }
   #ajuda ul { margin: 0 0 10px; padding-left: 18px; }
   #ajuda b { font-weight: 600; }
@@ -108,6 +126,8 @@
   <button id="btFechar" type="button" hidden>Fechar slides</button>
   <button id="btEnviar" type="button">Enviar arquivo</button>
   <button id="btGravar" type="button" title="Grava esta aba com o som do microfone e baixa o vídeo ao parar">Gravar</button>
+  <button id="btApp" type="button" hidden title="Aplicativo para transmitir pelo Wi-Fi da sala, sem internet">Baixar o app</button>
+  <button id="btAssistirSala" type="button" hidden title="Assistir à sala de outra pessoa pelo código">Assistir uma sala</button>
   <button id="btAjuda" type="button">Ajuda</button>
   <button id="btCheia" type="button">Tela cheia</button>
   <button id="btSair" type="button" hidden>Sair da sala</button>
@@ -130,9 +150,10 @@
     <li><b>Menu:</b> a barra da esquerda, com mouse ou toque. Paleta = cores, lápis = caneta e espessura, triângulo = formas, folhas = lousa e slides. A seta de baixo recolhe a barra.</li>
     <li><b>PDF:</b> envie pelo botão Enviar arquivo ou arraste para a janela; ele entra no carrossel como os slides e abre como num leitor de PDF: todas as páginas uma embaixo da outra, presas na largura da tela. Para rolar, arraste com a pinça (ou com o mouse), use a rodinha ou as setas ↑ ↓. O zoom é o mesmo do slide (duas pinças, bolinha azul ou Ctrl + rodinha), e o passador de slides, ◀ ▶ e as setas ← → pulam para a página seguinte ou anterior.</li>
     <li><b>Slides e imagens:</b> botão Enviar arquivo, ou arraste para a janela um .pptx, um PDF ou imagens. Troque de página com ◀ ▶ ou as setas do teclado. O quadro guarda no navegador uma cópia de cada imagem, .pptx e PDF enviado, com o caminho do arquivo, e reabre tudo ao recarregar, também no celular.</li>
+    <li><b>Aplicativo (sem internet):</b> o botão Baixar o app traz o instalador para Windows e Linux. Ele já vem com o servidor e com tudo o que o quadro usa: instale, abra e clique em Transmitir; os alunos no mesmo Wi-Fi assistem pelo QR Code, mesmo sem internet.</li>
     <li><b>Transmitir para a rede:</b> clique em Transmitir: o servidor da rede liga sozinho (depois de rodar <code>./instalar.sh</code> uma vez; sem isso, rode <code>node servidor.js</code>) e o QR Code abre. Os outros aparelhos da mesma rede leem o QR Code (ou abrem o endereço com o IP que aparece no selo "Ao vivo") e acompanham o arquivo, a página, a rolagem, o zoom, as anotações e o seu indicador, sem poder mexer em nada.</li>
     <li><b>Gravar a aula:</b> clique em Gravar e, no aviso do navegador, escolha esta aba (no Chrome ela já vem sugerida; marque "Compartilhar áudio da guia" se quiser o som da página). Se o navegador pedir o microfone, permita para gravar sua voz. Grava tudo o que aparece: câmera, slides, PDF e anotações. Clique em Parar (ou em "Parar compartilhamento" do navegador) e o vídeo é baixado: MP4 quando o navegador consegue, senão WebM.</li>
-    <li><b>Quem está assistindo:</b> quem abre pelo QR Code digita o nome antes de entrar (dá para trocar tocando no selo "Assistindo"). Clique no selo "Ao vivo" para ver a lista com o nome de cada um e há quanto tempo está assistindo; quando alguém entra ou sai, aparece um aviso no canto. Os nomes só aparecem para quem apresenta. Quem assiste sai pelo botão Sair da sala; quando a transmissão acaba, todos saem sozinhos e ninguém entra numa sala que não está mais no ar.</li>
+    <li><b>Quem está assistindo:</b> quem abre pelo QR Code digita o nome antes de entrar (dá para trocar tocando no selo "Assistindo"). Clique no selo "Ao vivo" para ver a lista com o nome de cada um e há quanto tempo está assistindo; quando alguém entra ou sai, aparece um aviso no canto. Os nomes só aparecem para quem apresenta. Com o servidor hospedado num domínio (<code>node servidor.js --web</code>), Transmitir cria uma sala com código e qualquer pessoa com internet assiste pelo QR Code ou digitando o código em "Assistir uma sala". Quem assiste sai pelo botão Sair da sala; quando a transmissão acaba, todos saem sozinhos e ninguém entra numa sala que não está mais no ar.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
@@ -156,12 +177,25 @@
   </form>
 </div>
 
+<div id="baixarApp" hidden role="dialog" aria-label="Baixar o aplicativo">
+  <div class="cartao">
+    <b>Aplicativo Quadro no Ar</b>
+    <span>Transmite pelo Wi-Fi da sala, mesmo sem internet: os alunos leem o QR Code e assistem. Já vem com tudo o que é preciso; é só instalar e abrir.</span>
+    <a id="appPrincipal" class="acao" href="#">Baixar</a>
+    <span id="appDica"></span>
+    <div class="outros"><span>Outros sistemas:</span><div class="outros" id="appOutros"></div></div>
+    <button class="fechar" id="appFechar" type="button">Fechar</button>
+  </div>
+</div>
+
 <div id="saguao" hidden role="dialog" aria-label="Fora da sala">
   <div class="cartao">
     <b id="saguaoTitulo">Nenhuma sala ativa</b>
     <span id="saguaoTexto"></span>
     <span id="saguaoUltima" hidden></span>
+    <input id="campoSala" type="text" hidden maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" enterkeyhint="go" placeholder="Código da sala" aria-label="Código da sala">
     <button id="btEntrar" type="button" disabled>Entrar na sala</button>
+    <button id="btSaguaoFechar" type="button" class="secundario" hidden>Cancelar</button>
   </div>
 </div>
 
@@ -174,9 +208,14 @@
     <div id="qrSemServidor" hidden style="text-align: left; line-height: 1.5">
       <span id="qrSemServidorTexto"></span>
       <ul id="qrPassos" style="margin: 8px 0 0; padding-left: 20px">
+        <li><b>Mais fácil:</b> instale o aplicativo Quadro no Ar (botão abaixo). Ele já vem com o servidor: é só abrir e clicar em Transmitir.</li>
         <li><b>Uma vez só:</b> no terminal, na pasta do quadro, rode <code style="background: #eef0f5; padding: 1px 5px; border-radius: 3px">./instalar.sh</code>. Daí em diante o botão Transmitir liga o servidor sozinho.</li>
         <li><b>Ou agora, à mão:</b> rode <code style="background: #eef0f5; padding: 1px 5px; border-radius: 3px">node servidor.js</code> na pasta do quadro.</li>
       </ul>
+      <div id="qrApp" hidden style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px; text-align: center">
+        <button id="qrBaixar" type="button" class="acao">Baixar o aplicativo</button>
+        <a href="quadronoar://iniciar">Já instalei: abrir o aplicativo</a>
+      </div>
     </div>
     <div class="outros" id="qrOutros"></div>
     <button class="fechar" id="qrFechar" type="button">Fechar</button>
@@ -217,11 +256,11 @@
   // ---------------------------------------------------------------------------------------------------------
   // Configuração
   // ---------------------------------------------------------------------------------------------------------
-  const URL_JSZIP = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';   // o .pptx é um arquivo zip
+  const URL_JSZIP = global.biblioteca('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');   // o .pptx é um arquivo zip
   const EXT_IMAGEM = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'];
   // leitor de PDF (pdf.js); a versão 3 ainda tem o arquivo .js comum, que entra com <script>
-  const URL_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-  const URL_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const URL_PDFJS = global.biblioteca('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  const URL_PDFJS_WORKER = global.biblioteca('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js');
   const ACEITA = ['.pptx', '.pdf'].concat(EXT_IMAGEM.map(e => '.' + e)).join(',');
   const TAMANHO_MAXIMO = 80 * 1024 * 1024;      // 80 MB por arquivo
   const LADO_MAXIMO = 2560;                     // imagens maiores que isso são reduzidas, para poupar memória
@@ -1113,7 +1152,10 @@
 </script>
 
 <script type="module">
-import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+// O rastreador de mãos só é carregado por quem apresenta (ver carregarDetector): quem assiste não precisa dele,
+// e sem internet a página continua funcionando.
+const URL_MEDIAPIPE = biblioteca("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
+let HandLandmarker = null, FilesetResolver = null;
 
 // Coordenadas lógicas da lousa. O lado menor da tela vale sempre 720; o maior acompanha o formato da janela
 // (1280x720 numa tela 16:9 deitada, 720x1560 num celular em pé). Ver ajustarTela().
@@ -1138,18 +1180,22 @@ const el = id => document.getElementById(id);
 // Pelo servidor da rede (servidor.js), quem abre pelo IP da rede só assiste; quem abre neste computador (localhost) apresenta.
 // ?assistir ou ?apresentar no endereço forçam um ou outro. Só assiste quem abriu a página pelo próprio servidor do quadro
 // (o QR Code ou o IP dele): o quadro publicado num site comum (GitHub Pages, Live Server...) abre sempre para apresentar.
+// Com o servidor no modo web (hospedado num domínio), quem abre o domínio apresenta e quem abre ?sala=CÓDIGO assiste.
 const PARAMETROS = new URLSearchParams(location.search);
 const PELO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
 const QUER_ASSISTIR = PELO_SERVIDOR && (PARAMETROS.has('assistir') || (!PARAMETROS.has('apresentar') && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)));
+const SALA_PARAM = (PARAMETROS.get('sala') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+const QS_SALA = SALA_PARAM ? '&sala=' + encodeURIComponent(SALA_PARAM) : '';     // vai junto em tudo o que quem assiste pede ao servidor
 async function infoDoServidor() {
   try {
-    const r = await fetch('/servidor', { cache: 'no-store', ...(AbortSignal.timeout ? { signal: AbortSignal.timeout(4000) } : {}) });
+    const r = await fetch('/servidor' + (SALA_PARAM ? '?sala=' + encodeURIComponent(SALA_PARAM) : ''), { cache: 'no-store', ...(AbortSignal.timeout ? { signal: AbortSignal.timeout(4000) } : {}) });
     const info = r.ok ? await r.json() : null;
     return info && info.quadro ? info : null;
   } catch (e) { return null; }
 }
-const INFO_INICIAL = QUER_ASSISTIR ? await infoDoServidor() : null;
-const ASSISTIR = !!INFO_INICIAL;
+const INFO_INICIAL = PELO_SERVIDOR ? await infoDoServidor() : null;
+const NA_WEB = !!(INFO_INICIAL && INFO_INICIAL.web);
+const ASSISTIR = !!INFO_INICIAL && (NA_WEB ? !!SALA_PARAM : QUER_ASSISTIR);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const meio = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 
@@ -1711,7 +1757,7 @@ function salvarAnotacoes() {
 // ---------- baixar o PDF com as anotações ----------
 // Cada página do PDF original recebe por cima uma imagem transparente com o que foi desenhado sobre ela
 // (o marca-texto vai numa imagem à parte, misturada como "multiplicar", para o texto continuar legível por baixo).
-const URL_PDFLIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+const URL_PDFLIB = biblioteca('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
 let promessaPdfLib = null;
 function carregarPdfLib() {
   if (window.PDFLib) return Promise.resolve(window.PDFLib);
@@ -1974,8 +2020,8 @@ function enquadre() {
 // Só cai para o comum se o gráfico não existir de verdade no aparelho, falhar, ou se mostrar lentíssimo nos primeiros quadros.
 // O botão na Ajuda troca à mão, e essa troca fica guardada no navegador para as próximas vezes.
 // Imagem: direta da câmera ou uma cópia reduzida; qual é mais rápida muda de aparelho para aparelho, então a página mede e escolhe.
-const URL_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
-const URL_MODELO = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+const URL_WASM = biblioteca("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+const URL_MODELO = biblioteca("https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task");
 const NOME_PROCESSADOR = { GPU: 'gráfico (GPU)', CPU: 'comum (CPU)' };
 const LADO_DETECCAO = 640;          // lado maior da cópia reduzida; abaixo disso o rastreador não fica mais rápido
 const AQUECIMENTO = 12, QUADROS_POR_FONTE = 10;
@@ -2024,6 +2070,7 @@ function placaGraficaDeVerdade() {
 }
 
 async function carregarDetector() {
+  if (!HandLandmarker) ({ HandLandmarker, FilesetResolver } = await import(URL_MEDIAPIPE));
   arquivosWasm = await FilesetResolver.forVisionTasks(URL_WASM);
   const antes = lembrado();
   if (antes) escolha = 'manual';
@@ -3074,7 +3121,7 @@ function quadro() {
 // O apresentador publica, várias vezes por segundo e só quando muda: o arquivo aberto, a página, o retângulo do documento
 // que aparece na tela dele, as pontas dos indicadores e as anotações (nas medidas do documento). Quem assiste recebe
 // tudo pelo servidor e mostra o mesmo trecho, ajustado ao tamanho da própria tela, sem poder mexer.
-let transmitindo = false, seqTx = 0, ultimoEstadoTx = '', ultimaAnotTx = '', ultimaAnotT = 0;
+let transmitindo = false, seqTx = Date.now(), ultimoEstadoTx = '', ultimaAnotTx = '', ultimaAnotT = 0;
 const enviados = new Map();         // id da apresentação -> 'ok' | 'enviando' | instante da última falha
 let promessaTransmissao = null;
 function iniciarTransmissao(abrirQr = true) {          // uma só tentativa por vez (ao abrir a página e pelo botão)
@@ -3092,17 +3139,58 @@ async function acharServidor() {
       const r = await fetch(b + '/servidor', { cache: 'no-store' });
       if (!r.ok) continue;
       const info = await r.json();
+      if (info && info.quadro && info.web && b === '') return { base: b, info, web: true };   // modo web: a sala é criada a seguir
       if (info && info.quadro && info.apresentador) return { base: b, info };
     } catch (e) { /* não está aqui */ }
   }
   return null;
 }
+// Modo web: a sala desta aba (código para quem assiste e chave para publicar). Recarregando a aba, volta para a mesma sala.
+const CHAVE_SALA_TX = 'quadro-no-ar.sala-transmitida';
+let SALA_TX = null, erroSalaWeb = null, idsTx = [];
+function rotaTx(caminho) {
+  if (!SALA_TX) return BASE + caminho;
+  return BASE + caminho + (caminho.includes('?') ? '&' : '?') + 'sala=' + encodeURIComponent(SALA_TX.codigo) + '&token=' + encodeURIComponent(SALA_TX.token);
+}
+async function abrirSalaWeb() {
+  try {
+    const g = JSON.parse(sessionStorage.getItem(CHAVE_SALA_TX) || 'null');
+    if (g) {
+      const r = await fetch('/servidor?sala=' + encodeURIComponent(g.codigo) + '&token=' + encodeURIComponent(g.token), { cache: 'no-store' });
+      const i = r.ok ? await r.json() : null;
+      if (i && i.apresentador) return g;
+    }
+  } catch (e) { /* sem sala guardada: cria outra */ }
+  const r = await fetch('/salas', { method: 'POST' });
+  if (!r.ok) throw new Error(await r.text().catch(() => 'erro ' + r.status));
+  const nova = await r.json();
+  try { sessionStorage.setItem(CHAVE_SALA_TX, JSON.stringify(nova)); } catch (e) { /* vale só até recarregar */ }
+  return nova;
+}
+// a sala sumiu do servidor (expirou ou o servidor reiniciou): para de transmitir; o botão Transmitir abre outra
+function salaPerdida() {
+  for (const id of idsTx) clearInterval(id);
+  desligarSinais();
+  idsTx = []; transmitindo = false; SALA_TX = null; sessaoTx = null;
+  enviados.clear(); ultimoEstadoTx = ''; ultimaAnotTx = '';
+  try { sessionStorage.removeItem(CHAVE_SALA_TX); sessionStorage.removeItem('quadro-no-ar.transmitindo'); } catch (e) { /* sem armazenamento */ }
+  el('aoVivo').hidden = true; el('plateia').hidden = true; el('btQr').textContent = 'Transmitir';
+  recado('A sala da transmissão expirou. Clique em Transmitir para abrir uma nova (o QR Code muda).', 10000);
+}
 async function comecarTransmissao(abrirQr) {
   if (ASSISTIR || transmitindo) return;
+  erroSalaWeb = null;
   const achado = await acharServidor();
   if (!achado) return;
-  const info = achado.info;
+  let info = achado.info;
   BASE = achado.base;
+  if (achado.web) {
+    try {
+      SALA_TX = await abrirSalaWeb();
+      info = await (await fetch(rotaTx('/servidor?transmitindo=1'), { cache: 'no-store' })).json();
+      if (!info.apresentador) throw new Error('a sala não aceitou a chave');
+    } catch (e) { SALA_TX = null; erroSalaWeb = (e && e.message) || 'erro'; return; }
+  }
   transmitindo = true;
   try { sessionStorage.setItem('quadro-no-ar.transmitindo', '1'); } catch (e) { /* sem armazenamento */ }
   enderecosDaRede = info.enderecos || [];
@@ -3114,20 +3202,24 @@ async function comecarTransmissao(abrirQr) {
   const selo = el('aoVivo'), rede = enderecosDaRede[0];
   const mostrar = i => {
     selo.hidden = false;
-    selo.textContent = 'Ao vivo' + (rede ? ' · ' + rede.replace('http://', '') : '') + ' · ' + (i.assistindo || 0) + ' assistindo';
+    const onde = SALA_TX ? 'sala ' + SALA_TX.codigo : rede ? rede.replace(/^https?:\/\//, '') : '';
+    selo.textContent = 'Ao vivo' + (onde ? ' · ' + onde : '') + ' · ' + (i.assistindo || 0) + ' assistindo';
     atualizarPlateia(i.plateia || []);
   };
   mostrar(info);
-  selo.title = 'Clique para ver quem está assistindo. Os outros aparelhos da rede assistem abrindo: ' + (info.enderecos || []).join(', ');
+  selo.title = 'Clique para ver quem está assistindo. ' + (SALA_TX ? 'Quem assiste abre: ' : 'Os outros aparelhos da rede assistem abrindo: ') + (info.enderecos || []).join(', ');
   selo.classList.add('clicavel');
-  selo.addEventListener('click', () => { el('plateia').hidden = !el('plateia').hidden; desenharPlateia(); });
-  setInterval(transmitir, 80);
+  selo.onclick = () => { el('plateia').hidden = !el('plateia').hidden; desenharPlateia(); };
   // avisa o servidor de que a sala continua aberta; se ela tinha acabado (ou o servidor reiniciou), publica tudo de novo
-  const avisar = () => fetch(BASE + '/servidor?transmitindo=1', { cache: 'no-store' }).then(r => r.json()).then(i => { conferirSessao(i); mostrar(i); }).catch(() => {});
-  avisar(); setInterval(avisar, 4000);
-  // fechou ou recarregou a aba: a sala acaba logo, a menos que a aba volte a transmitir em seguida
-  addEventListener('pagehide', () => { try { navigator.sendBeacon(BASE + '/encerrar'); } catch (e) { /* a sala acaba sozinha */ } });
+  const avisar = () => fetch(rotaTx('/servidor?transmitindo=1'), { cache: 'no-store' }).then(r => r.json()).then(i => {
+    if (SALA_TX && i && !i.apresentador) return salaPerdida();
+    conferirSessao(i); mostrar(i);
+  }).catch(() => {});
+  avisar(); ligarSinais();
+  idsTx = [setInterval(transmitir, 80), setInterval(avisar, 4000)];
 }
+// fechou ou recarregou a aba: a sala acaba logo, a menos que a aba volte a transmitir em seguida
+addEventListener('pagehide', () => { if (transmitindo) try { navigator.sendBeacon(rotaTx('/encerrar')); } catch (e) { /* a sala acaba sozinha */ } });
 let sessaoTx = null;
 function conferirSessao(i) {
   if (!i) return;
@@ -3173,7 +3265,7 @@ function desenharPlateia() {
   caixa.replaceChildren(titulo, ol);
 }
 // ----- QR Code com o endereço de assistir -----
-const URL_QR = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+const URL_QR = biblioteca('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
 let enderecosDaRede = [], promessaQr = null;
 function carregarQr() {
   if (window.qrcode) return Promise.resolve(window.qrcode);
@@ -3189,22 +3281,27 @@ function carregarQr() {
 // Botão Transmitir: com o servidor no ar, transmite e mostra o QR Code. Sem ele, pede ao sistema para iniciá-lo
 // (o endereço quadronoar://, registrado pelo instalar.sh) e espera ele subir; se não subir, explica o que fazer.
 let iniciandoServidor = false;
-function cartaoDeAviso(titulo, texto, comPassos) {
+function cartaoDeAviso(titulo, texto, comPassos, comApp) {
   el('qrTitulo').textContent = titulo;
   el('qrSemServidorTexto').textContent = texto;
   el('qrPassos').hidden = !comPassos;
+  el('qrApp').hidden = !comApp || NO_APLICATIVO;
   el('qrSemServidor').hidden = false;
   for (const id of ['qrDesenho', 'qrEndereco', 'qrDica', 'qrOutros']) el(id).hidden = true;
   el('qr').hidden = false;
 }
 async function botaoTransmitir() {
   if (!transmitindo) await iniciarTransmissao(false);
+  if (!transmitindo && erroSalaWeb) return cartaoDeAviso('Transmitir', 'Não consegui abrir uma sala neste servidor: ' + erroSalaWeb, false);
   if (transmitindo) {
     if (enderecosDaRede.length) mostrarQr();
     else cartaoDeAviso('Transmitir para a rede', 'O servidor está no ar, mas este computador não está conectado a nenhuma rede (Wi-Fi ou cabo). Conecte-se e recarregue a página.', false);
     return;
   }
   if (iniciandoServidor) return;
+  // num site comum (GitHub Pages...) o quadro não alcança o servidor deste computador: o caminho é o aplicativo
+  const nesteComputador = !PELO_SERVIDOR || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+  if (!nesteComputador) return cartaoDeAviso('Transmitir para a rede da sala', 'Para transmitir pelo Wi-Fi da sala, mesmo sem internet, use o aplicativo Quadro no Ar: ele já vem com tudo pronto, é só instalar e abrir.', false, true);
   iniciandoServidor = true;
   cartaoDeAviso('Iniciando a transmissão…', 'Ligando o servidor da rede. Se o navegador perguntar se pode abrir o "xdg-open", permita (marque "Sempre permitir" para não perguntar de novo).', false);
   const link = document.createElement('a'); link.href = 'quadronoar://iniciar'; link.hidden = true;
@@ -3216,13 +3313,15 @@ async function botaoTransmitir() {
   }
   iniciandoServidor = false;
   if (transmitindo) { if (enderecosDaRede.length) mostrarQr(); else botaoTransmitir(); return; }
-  if (!el('qr').hidden) cartaoDeAviso('Transmitir para a rede', 'Não consegui ligar o servidor sozinho. Faça uma destas opções e clique em Transmitir de novo:', true);
+  if (!el('qr').hidden) cartaoDeAviso('Transmitir para a rede', 'Não consegui ligar o servidor sozinho. Faça uma destas opções e clique em Transmitir de novo:', true, true);
 }
 async function mostrarQr(endereco) {
   endereco = endereco || enderecosDaRede[0];
   if (!endereco) return;
   el('qrSemServidor').hidden = true; el('qrTitulo').textContent = 'Aponte a câmera do celular para assistir';
   for (const id of ['qrDesenho', 'qrEndereco', 'qrDica', 'qrOutros']) el(id).hidden = false;
+  el('qrDica').textContent = SALA_TX ? 'Funciona de qualquer rede com internet. Código da sala: ' + SALA_TX.codigo + ' (dá para digitar em ' + location.host + ', no botão "Assistir uma sala").'
+    : 'O aparelho precisa estar na mesma rede (Wi-Fi) que este computador.';
   let qrcode;
   try { qrcode = await carregarQr(); }
   catch (e) { recado('Não consegui carregar o gerador de QR Code. Endereço para assistir: ' + endereco, 10000); return; }
@@ -3237,16 +3336,162 @@ async function mostrarQr(endereco) {
   const outros = el('qrOutros'); outros.replaceChildren();
   if (enderecosDaRede.length > 1) for (const e of enderecosDaRede) {
     const b = document.createElement('button'); b.type = 'button';
-    b.textContent = e.replace('http://', ''); b.className = e === endereco ? 'atual' : '';
+    b.textContent = e.replace(/^https?:\/\//, ''); b.className = e === endereco ? 'atual' : '';
     b.addEventListener('click', () => mostrarQr(e));
     outros.appendChild(b);
   }
   el('qr').hidden = false;
 }
 el('btQr').addEventListener('click', botaoTransmitir);
+
+// ----- aplicativo instalável (pasta aplicativo/; os instaladores ficam nas versões publicadas do GitHub) -----
+const NO_APLICATIVO = /\bElectron\//.test(navigator.userAgent);
+const DOWNLOADS = 'https://github.com/Gabriel-SSantos/LousaDigital/releases/latest/download/';
+const ARQUIVOS_APP = {
+  windows: ['Windows', 'Quadro-no-Ar-Setup.exe'],
+  appimage: ['Linux (AppImage, qualquer distribuição)', 'Quadro-no-Ar.AppImage'],
+  deb: ['Linux: Ubuntu, Debian, Mint (.deb)', 'Quadro-no-Ar.deb']
+};
+function sistemaDoComputador() {
+  const ua = navigator.userAgent;
+  if (/Android|iPhone|iPad/i.test(ua)) return 'celular';
+  if (/Windows/i.test(ua)) return 'windows';
+  if (/Mac OS X/i.test(ua)) return 'mac';
+  if (/Ubuntu|Debian|Mint/i.test(ua)) return 'deb';
+  if (/Linux|X11/i.test(ua)) return 'appimage';
+  return 'outro';
+}
+function mostrarBaixarApp() {
+  const so = sistemaDoComputador(), principal = ARQUIVOS_APP[so], botao = el('appPrincipal');
+  botao.hidden = !principal;
+  if (principal) { botao.href = DOWNLOADS + principal[1]; botao.textContent = 'Baixar para ' + principal[0]; }
+  el('appDica').textContent = {
+    windows: 'Ao instalar, o Windows pede permissão de administrador uma vez: ela libera o firewall para os alunos se conectarem. Se aparecer "O Windows protegeu o computador", clique em "Mais informações" e em "Executar assim mesmo".',
+    appimage: 'Depois de baixar, clique com o botão direito no arquivo, vá em Propriedades e marque "Permitir executar como programa". Depois é só abrir.',
+    deb: 'Abra o arquivo baixado para instalar pela central de programas.',
+    mac: 'Ainda não há versão para Mac. Use o site com internet.',
+    celular: 'O aplicativo é para o computador de quem apresenta. No celular, assista lendo o QR Code de quem apresenta.'
+  }[so] || '';
+  const outros = el('appOutros'); outros.replaceChildren();
+  for (const [k, [nome, arquivo]] of Object.entries(ARQUIVOS_APP)) {
+    if (k === so) continue;
+    const a = document.createElement('a'); a.href = DOWNLOADS + arquivo; a.textContent = nome; outros.append(a);
+  }
+  el('baixarApp').hidden = false;
+}
+el('btApp').hidden = ASSISTIR || NO_APLICATIVO;
+el('btApp').addEventListener('click', mostrarBaixarApp);
+el('qrBaixar').addEventListener('click', () => { el('qr').hidden = true; mostrarBaixarApp(); });
+el('appFechar').addEventListener('click', () => { el('baixarApp').hidden = true; });
+el('baixarApp').addEventListener('click', e => { if (e.target === el('baixarApp')) el('baixarApp').hidden = true; });
+addEventListener('keydown', e => { if (e.key === 'Escape') el('baixarApp').hidden = true; });
 el('qrFechar').addEventListener('click', () => { el('qr').hidden = true; });
 el('qr').addEventListener('click', e => { if (e.target === el('qr')) el('qr').hidden = true; });     // clique fora do cartão fecha
 addEventListener('keydown', e => { if (e.key === 'Escape') el('qr').hidden = true; });
+
+// ----- conexão direta (WebRTC), no modo web -----
+// O servidor só apresenta os aparelhos uns aos outros (sinalização). Depois disso, o quadro, as anotações e os arquivos vão
+// direto deste computador para cada aparelho, pela rede local, sem passar pela internet. Quem não consegue a conexão direta
+// (rede com isolamento entre aparelhos, celular no 4G) continua recebendo pelo servidor: nada para de funcionar.
+const ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
+const COM_P2P = typeof RTCPeerConnection === 'function';
+const pares = new Map();           // conexão de quem assiste -> { pc, dados, estado, aberto }
+let conexoesSala = [], esSinais = null, precisavaServidor = true;
+const ultimoTx = { estado: '', anotacoes: '' };   // os últimos textos publicados, para mandar a quem acabou de conectar direto
+function esperarCandidatos(pc, ms = 3000) {      // junta os caminhos de rede possíveis antes de mandar a oferta ou a resposta
+  if (pc.iceGatheringState === 'complete') return Promise.resolve();
+  return new Promise(ok => { pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') ok(); }); setTimeout(ok, ms); });
+}
+const tamanhoMensagem = pc => Math.min(64 * 1024, (pc.sctp && pc.sctp.maxMessageSize) || 16 * 1024);
+// textos grandes (anotações) vão em pedaços, no canal ordenado
+function enviarTexto(c, pc, obj) {
+  if (!c || c.readyState !== 'open') return;
+  const t = JSON.stringify(obj), n = Math.floor(tamanhoMensagem(pc) / 3);
+  try {
+    if (t.length <= n) return c.send(t);
+    for (let i = 0; i < t.length; i += n) c.send(JSON.stringify({ t: '_', d: t.slice(i, i + n) }));
+    c.send('{"t":"_fim"}');
+  } catch (e) { /* canal fechando */ }
+}
+// alguém assistindo ainda depende do servidor? (sem conexão direta, ou fora do modo web)
+const precisaServidor = () => !SALA_TX || !COM_P2P || conexoesSala.some(id => !(pares.get(id) && pares.get(id).aberto));
+function conferirNecessidade() {
+  const agora = precisaServidor();
+  if (agora && !precisavaServidor) ultimaAnotTx = '';      // voltou a precisar: as anotações são publicadas de novo no servidor
+  precisavaServidor = agora;
+}
+function ligarSinais() {
+  if (!SALA_TX || !COM_P2P || esSinais) return;
+  esSinais = new EventSource(rotaTx('/sinais'));
+  esSinais.addEventListener('conexoes', e => {
+    try { conexoesSala = JSON.parse(e.data); } catch (x) { return; }
+    for (const id of [...pares.keys()]) if (!conexoesSala.includes(id)) fecharPar(id);
+    conferirNecessidade();
+  });
+  esSinais.addEventListener('sinal', e => {
+    let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+    responderPar(m.de, m.d).catch(() => fecharPar(m.de));
+  });
+}
+function desligarSinais() {
+  if (esSinais) esSinais.close();
+  esSinais = null; conexoesSala = [];
+  for (const id of [...pares.keys()]) fecharPar(id);
+}
+function fecharPar(id) {
+  const p = pares.get(id);
+  if (!p) return;
+  pares.delete(id);
+  try { p.pc.close(); } catch (e) { /* já fechada */ }
+  conferirNecessidade();
+}
+function enviarPar(p, tipo, texto) {
+  const rapido = tipo === 'estado' && p.estado && p.estado.readyState === 'open';    // o estado vai no canal sem fila: não espera um arquivo terminar
+  if (rapido) { try { p.estado.send(JSON.stringify({ t: tipo, d: texto })); } catch (e) { /* canal fechando */ } }
+  else enviarTexto(p.dados, p.pc, { t: tipo, d: texto });
+}
+async function responderPar(id, d) {             // quem assiste mandou a oferta: responde e espera os canais abrirem
+  if (!d || !d.sdp || d.sdp.type !== 'offer') return;
+  fecharPar(id);
+  const pc = new RTCPeerConnection({ iceServers: ICE }), p = { pc, dados: null, estado: null, aberto: false };
+  pares.set(id, p);
+  pc.ondatachannel = e => {
+    const c = e.channel; c.binaryType = 'arraybuffer';
+    if (c.label === 'estado') { p.estado = c; return; }
+    p.dados = c;
+    const abriu = () => {
+      if (p.aberto) return;
+      p.aberto = true; conferirNecessidade();
+      for (const t of ['estado', 'anotacoes']) if (ultimoTx[t]) enviarPar(p, t, ultimoTx[t]);
+    };
+    c.onopen = abriu; if (c.readyState === 'open') abriu();
+    c.onclose = () => { p.aberto = false; conferirNecessidade(); };
+    c.onmessage = m => { let q; try { q = JSON.parse(m.data); } catch (x) { return; } if (q.t === 'pedir') enviarArquivoPar(p, q.id); };
+  };
+  pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed') fecharPar(id); };
+  await pc.setRemoteDescription(d.sdp);
+  await pc.setLocalDescription(await pc.createAnswer());
+  await esperarCandidatos(pc);
+  if (pares.get(id) !== p) return;
+  await fetch(rotaTx('/sinal?para=' + encodeURIComponent(id)), { method: 'POST', body: JSON.stringify({ sdp: pc.localDescription }) });
+}
+async function enviarArquivoPar(p, id) {         // o arquivo aberto vai em pedaços, sem encher a fila do canal
+  const a = apresentacoes.find(x => x.id === id), c = p.dados;
+  try {
+    const arq = a && (a.original || await lerAnexo(a.caminho));
+    if (!arq) throw new Error('sem arquivo');
+    const buf = await arq.arrayBuffer(), n = tamanhoMensagem(p.pc);
+    c.bufferedAmountLowThreshold = 1 << 20;
+    enviarTexto(c, p.pc, { t: 'arquivo', id, nome: a.nome, tipo: arq.type || '', tamanho: buf.byteLength });
+    for (let i = 0; i < buf.byteLength; i += n) {
+      if (c.readyState !== 'open') return;
+      if (c.bufferedAmount > 8 << 20) await new Promise(ok => { c.addEventListener('bufferedamountlow', ok, { once: true }); c.addEventListener('close', ok, { once: true }); });
+      if (c.readyState !== 'open') return;
+      c.send(buf.slice(i, i + n));
+    }
+    enviarTexto(c, p.pc, { t: 'fim', id });
+  } catch (e) { enviarTexto(c, p.pc, { t: 'sem-arquivo', id }); }
+}
 
 async function enviarArquivo(a) {
   const st = enviados.get(a.id);
@@ -3255,22 +3500,28 @@ async function enviarArquivo(a) {
   try {
     const arq = a.original || await lerAnexo(a.caminho);
     if (!arq) throw new Error('sem arquivo');
-    const r = await fetch(BASE + '/arquivo?id=' + encodeURIComponent(a.id), { method: 'PUT', headers: { 'X-Nome': encodeURIComponent(a.nome) }, body: arq });
+    const r = await fetch(rotaTx('/arquivo?id=' + encodeURIComponent(a.id)), { method: 'PUT', headers: { 'X-Nome': encodeURIComponent(a.nome) }, body: arq });
+    if (r.status === 413) { enviados.set(a.id, 'grande'); return; }     // maior que o limite do servidor: só pela conexão direta
     if (!r.ok) throw new Error('recusado');
     enviados.set(a.id, 'ok');
   } catch (e) { enviados.set(a.id, performance.now()); }       // tenta de novo daqui a pouco
 }
-function publicar(tipo, texto) {
-  fetch(BASE + '/publicar?tipo=' + tipo + '&seq=' + (++seqTx), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: texto }).catch(() => {});
+// Cada publicação leva um número de ordem (q): quem recebe pelos dois caminhos (direto e servidor) ignora o que for mais velho.
+function publicar(tipo, texto, peloServidor = true) {
+  const q = ++seqTx, t = texto.slice(0, -1) + ',"q":' + q + '}';
+  ultimoTx[tipo] = t;
+  for (const p of pares.values()) if (p.aberto) enviarPar(p, tipo, t);
+  if (peloServidor) fetch(rotaTx('/publicar?tipo=' + tipo + '&seq=' + q), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: t }).catch(() => {});
 }
 const pontasApontando = () => maos.filter(m => m.lm && m.ponta && m.dedos && m.dedos[1] === 1).map(m => m.ponta);
 function transmitir() {
   const pg = paginas[paginaAtual], a = pg && apresentacoes.find(x => x.paginas === paginas);
   let estado;
   if (a) {
-    if (enviados.get(a.id) !== 'ok') enviarArquivo(a);
+    // pelo servidor só se alguém depende dele (quem está na conexão direta pede o arquivo direto a este computador)
+    if (enviados.get(a.id) !== 'ok' && enviados.get(a.id) !== 'grande' && precisaServidor()) enviarArquivo(a);
     const v = vistaAtual(), f = LARGURA_DOC / v.w, doc = p => [arred((p[0] - v.x) * f), arred((p[1] - v.y) * f)];
-    estado = { modo: 'pagina', id: a.id, nome: a.nome, pronto: enviados.get(a.id) === 'ok', indice: paginaAtual,
+    estado = { modo: 'pagina', id: a.id, nome: a.nome, pronto: enviados.get(a.id) === 'ok', grande: enviados.get(a.id) === 'grande', indice: paginaAtual,
                ret: [-v.x * f, -v.y * f, W * f, H * f].map(arred), pontas: pontasApontando().map(doc), num: pg.folhas ? paginaDoPdf(pg, v) + 1 : 0 };
   } else estado = { modo: 'lousa', W, H, pontas: pontasApontando().map(p => p.map(arred)) };
   const texto = JSON.stringify(estado);
@@ -3282,7 +3533,7 @@ function transmitir() {
   const anot = a ? { id: a.id, indice: paginaAtual, itens: itensNoDocumento(pg, lista, LARGURA_DOC).map(paraGuardar) }
                  : { lousa: true, W, H, itens: lista.map(paraGuardar) };
   const t2 = JSON.stringify(anot);
-  if (t2 !== ultimaAnotTx) { ultimaAnotTx = t2; publicar('anotacoes', t2); }
+  if (t2 !== ultimaAnotTx) { ultimaAnotTx = t2; publicar('anotacoes', t2, precisaServidor()); }   // anotações podem ser grandes: no servidor, só se alguém precisa
 }
 
 // ----- quem assiste -----
@@ -3304,19 +3555,23 @@ function iniciarAssistir() {
     try { localStorage.setItem('quadro-no-ar.aparelho', aparelho); } catch (e) { /* vale só nesta aba */ }
   }
   let es = null;
+  const rotulo = () => 'Assistindo' + (nome ? ' como ' + nome : '') + (direta.aberta ? ' · conexão direta' : '');
+  const atualizarSelo = () => { if (es && es.readyState === 1) selo.textContent = rotulo(); };
   const conectar = () => {
     if (es) es.close();
-    const rotulo = () => 'Assistindo' + (nome ? ' como ' + nome : '');
     selo.className = 'parado clicavel'; selo.textContent = 'Conectando…';
-    es = new EventSource('/eventos?aparelho=' + encodeURIComponent(aparelho) + '&nome=' + encodeURIComponent(nome));
+    es = new EventSource('/eventos?aparelho=' + encodeURIComponent(aparelho) + '&nome=' + encodeURIComponent(nome) + QS_SALA);
     es.onopen = () => {
       selo.className = 'clicavel'; selo.textContent = rotulo();
-      try { localStorage.setItem(CHAVE_ULTIMA_SALA, JSON.stringify({ endereco: location.host, quando: Date.now() })); } catch (e) { /* sem armazenamento */ }
+      try { localStorage.setItem(CHAVE_ULTIMA_SALA, JSON.stringify({ endereco: location.host, sala: SALA_PARAM, quando: Date.now() })); } catch (e) { /* sem armazenamento */ }
     };
     es.addEventListener('encerrada', () => { es.close(); irParaSaguao('encerrada'); });
     es.onerror = () => { selo.className = 'parado clicavel'; selo.textContent = 'Sem conexão. Tentando de novo…'; };
-    es.addEventListener('estado', e => { try { estadoRemoto = JSON.parse(e.data); } catch (x) { return; } aplicarEstadoRemoto(); });
-    es.addEventListener('anotacoes', e => { try { anotRemota = JSON.parse(e.data); } catch (x) { return; } aplicarAnotRemota(); });
+    es.addEventListener('estado', e => receberRemoto('estado', e.data));
+    es.addEventListener('anotacoes', e => receberRemoto('anotacoes', e.data));
+    // modo web: com o código desta conexão, tenta a conexão direta com quem apresenta (a resposta chega como 'sinal')
+    es.addEventListener('ola', e => { try { conectarDireto(JSON.parse(e.data).id, atualizarSelo).catch(() => {}); } catch (x) { /* fica pelo servidor */ } });
+    es.addEventListener('sinal', e => { try { respostaDireta(JSON.parse(e.data)); } catch (x) { /* ignora */ } });
   };
   const perguntarNome = () => {
     el('campoNome').value = nome;
@@ -3335,7 +3590,7 @@ function iniciarAssistir() {
   selo.title = 'Toque para trocar o seu nome';
   selo.addEventListener('click', perguntarNome);
   el('btSair').hidden = false;
-  el('btSair').addEventListener('click', () => { if (es) es.close(); irParaSaguao('saiu'); });
+  el('btSair').addEventListener('click', () => { if (es) es.close(); fecharDireto(); irParaSaguao('saiu'); });
   if (nome) conectar(); else perguntarNome();
   addEventListener('resize', () => setTimeout(() => { aplicarEstadoRemoto(); aplicarAnotRemota(); }, 50));
   recado('Aguardando quem apresenta…', 0);
@@ -3344,6 +3599,10 @@ function iniciarAssistir() {
 // ----- fora da sala -----
 // O saguão tem endereço próprio (?saguao=motivo): recarregar a página não põe ninguém de volta na sala.
 const CHAVE_ULTIMA_SALA = 'quadro-no-ar.ultima-sala';
+function lerUltimaSala() {
+  try { const u = JSON.parse(localStorage.getItem(CHAVE_ULTIMA_SALA) || 'null'); return u && u.endereco === location.host ? u : null; } catch (e) { return null; }
+}
+const haQuanto = t => { const min = Math.floor((Date.now() - t) / 60000); return min < 1 ? 'agora há pouco' : 'há ' + (min < 60 ? min + ' min' : Math.floor(min / 60) + ' h'); };
 function irParaSaguao(motivo) {
   const p = new URLSearchParams(location.search); p.set('saguao', motivo);
   location.replace(location.pathname + '?' + p);
@@ -3360,35 +3619,140 @@ function iniciarSaguao(motivo) {
   tela.style.pointerEvents = 'none';
   aplicarCamadas();
   el('saguaoTitulo').textContent = motivo === 'saiu' ? 'Você saiu da sala' : motivo === 'encerrada' ? 'A apresentação terminou' : 'Nenhuma sala ativa';
-  let ultima = null;
-  try { ultima = JSON.parse(localStorage.getItem(CHAVE_ULTIMA_SALA) || 'null'); } catch (e) { /* sem armazenamento */ }
-  if (ultima && ultima.endereco === location.host) {
-    const min = Math.floor((Date.now() - ultima.quando) / 60000);
-    el('saguaoUltima').textContent = 'Última sala: ' + ultima.endereco + ' · ' + (min < 1 ? 'agora há pouco' : 'há ' + (min < 60 ? min + ' min' : Math.floor(min / 60) + ' h'));
+  const ultima = lerUltimaSala();
+  if (ultima && (ultima.sala || '') === SALA_PARAM) {
+    el('saguaoUltima').textContent = 'Última sala: ' + (ultima.sala || ultima.endereco) + ' · ' + haQuanto(ultima.quando);
     el('saguaoUltima').hidden = false;
     el('btEntrar').textContent = 'Entrar na última sala';
   }
+  const onde = SALA_PARAM ? 'na sala ' + SALA_PARAM : 'em ' + location.host;
   const mostrar = info => {
     const aberta = !!(info && info.sala);
     el('btEntrar').disabled = !aberta;
-    el('saguaoTexto').textContent = !info ? 'Sem conexão com ' + location.host + '. O computador de quem apresenta está ligado e na mesma rede?'
-      : aberta ? 'Há uma apresentação no ar em ' + location.host + '.'
-      : 'Ninguém está apresentando em ' + location.host + ' agora. O botão libera sozinho quando a apresentação começar.';
+    el('saguaoTexto').textContent = !info ? 'Sem conexão com ' + location.host + (NA_WEB ? '. Confira a internet.' : '. O computador de quem apresenta está ligado e na mesma rede?')
+      : info.existe === false ? 'A sala ' + SALA_PARAM + ' não existe ou já foi apagada. Confira o código com quem apresenta.'
+      : aberta ? 'Há uma apresentação no ar ' + onde + '.'
+      : 'Ninguém está apresentando ' + onde + ' agora. O botão libera sozinho quando a apresentação começar.';
   };
   mostrar(INFO_INICIAL);
   el('btEntrar').addEventListener('click', entrarNaSala);
   setInterval(() => infoDoServidor().then(mostrar), 3000);
   el('saguao').hidden = false;
 }
+// modo web, no quadro de quem apresenta: entrar na sala de outra pessoa digitando o código
+function abrirEntradaDeSala() {
+  const campo = el('campoSala'), ultima = lerUltimaSala();
+  el('saguaoTitulo').textContent = 'Assistir uma sala';
+  el('saguaoTexto').textContent = 'Digite o código que aparece embaixo do QR Code de quem apresenta.';
+  if (ultima && ultima.sala) {
+    if (!campo.value) campo.value = ultima.sala;
+    el('saguaoUltima').textContent = 'Última sala: ' + ultima.sala + ' · ' + haQuanto(ultima.quando);
+    el('saguaoUltima').hidden = false;
+  }
+  campo.hidden = false; el('btSaguaoFechar').hidden = false;
+  el('btEntrar').textContent = 'Entrar'; el('btEntrar').disabled = false;
+  el('saguao').hidden = false;
+  setTimeout(() => { campo.focus(); campo.select(); }, 50);
+}
+function ligarEntradaDeSala() {
+  const ir = () => {
+    const codigo = el('campoSala').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!codigo) return el('campoSala').focus();
+    location.href = location.pathname + '?sala=' + encodeURIComponent(codigo);
+  };
+  el('btAssistirSala').hidden = false;
+  el('btAssistirSala').addEventListener('click', abrirEntradaDeSala);
+  el('btEntrar').addEventListener('click', ir);
+  el('campoSala').addEventListener('keydown', e => { if (e.key === 'Enter') ir(); else if (e.key === 'Escape') el('saguao').hidden = true; });
+  el('btSaguaoFechar').addEventListener('click', () => { el('saguao').hidden = true; });
+}
+// ----- quem assiste: conexão direta com quem apresenta (modo web) -----
+const direta = { pc: null, dados: null, aberta: false, texto: '', recebendo: null, pedidos: new Map() };
+const ultimoQ = { estado: 0, anotacoes: 0 };
+function receberRemoto(tipo, texto) {           // chega pelo servidor ou pela conexão direta; o que for mais velho é ignorado
+  let v; try { v = JSON.parse(texto); } catch (e) { return; }
+  if (v.q) { if (v.q <= ultimoQ[tipo]) return; ultimoQ[tipo] = v.q; }
+  if (tipo === 'estado') { estadoRemoto = v; aplicarEstadoRemoto(); } else { anotRemota = v; aplicarAnotRemota(); }
+}
+async function conectarDireto(conexao, aoMudar) {
+  fecharDireto();
+  if (!NA_WEB || !COM_P2P) return;
+  const pc = new RTCPeerConnection({ iceServers: ICE });
+  direta.pc = pc;
+  const dados = pc.createDataChannel('dados'), estado = pc.createDataChannel('estado', { ordered: false });
+  for (const c of [dados, estado]) { c.binaryType = 'arraybuffer'; c.onmessage = m => mensagemDireta(m.data); }
+  const caiu = () => { if (direta.pc === pc && direta.aberta) { direta.aberta = false; falharPedidos(); aoMudar(); aplicarEstadoRemoto(); } };
+  dados.onopen = () => { if (direta.pc !== pc) return; direta.aberta = true; direta.dados = dados; aoMudar(); aplicarEstadoRemoto(); };
+  dados.onclose = caiu;
+  pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') caiu(); };
+  await pc.setLocalDescription(await pc.createOffer());
+  await esperarCandidatos(pc);
+  if (direta.pc !== pc) return;
+  await fetch('/sinal?de=' + encodeURIComponent(conexao) + QS_SALA, { method: 'POST', body: JSON.stringify({ sdp: pc.localDescription }) });
+}
+function respostaDireta(d) { if (direta.pc && d && d.sdp && d.sdp.type === 'answer') direta.pc.setRemoteDescription(d.sdp).catch(() => {}); }
+function fecharDireto() {
+  if (direta.pc) try { direta.pc.close(); } catch (e) { /* já fechada */ }
+  direta.pc = null; direta.dados = null; direta.aberta = false;
+  falharPedidos();
+}
+function falharPedidos() {
+  for (const p of direta.pedidos.values()) p.falha(new Error('a conexão direta caiu'));
+  direta.pedidos.clear(); direta.recebendo = null; direta.texto = '';
+}
+function mensagemDireta(m) {
+  if (m instanceof ArrayBuffer) {
+    const r = direta.recebendo;
+    if (r) { r.partes.push(m); r.bytes += m.byteLength; r.progresso(r.tamanho ? r.bytes / r.tamanho : 1); }
+    return;
+  }
+  let v; try { v = JSON.parse(m); } catch (e) { return; }
+  if (v.t === '_') { direta.texto += v.d; return; }
+  if (v.t === '_fim') { const t = direta.texto; direta.texto = ''; return mensagemDireta(t); }
+  if (v.t === 'estado' || v.t === 'anotacoes') return receberRemoto(v.t, v.d);
+  if (v.t === 'arquivo') {
+    const ped = direta.pedidos.get(v.id);
+    direta.recebendo = { ...v, partes: [], bytes: 0, progresso: ped ? ped.progresso : () => {} };
+    return;
+  }
+  if (v.t === 'fim' || v.t === 'sem-arquivo') {
+    const r = direta.recebendo, ped = direta.pedidos.get(v.id);
+    direta.recebendo = null; direta.pedidos.delete(v.id);
+    if (!ped) return;
+    if (v.t === 'fim' && r && r.id === v.id) ped.ok(new File(r.partes, r.nome, { type: r.tipo }));
+    else ped.falha(new Error('quem apresenta não mandou o arquivo'));
+  }
+}
+function pedirArquivoDireto(id, progresso) {
+  return new Promise((ok, falha) => {
+    let relogio;
+    const parar = () => clearTimeout(relogio);
+    const vigiar = () => { parar(); relogio = setTimeout(() => { direta.pedidos.delete(id); falha(new Error('a conexão direta parou')); }, 15000); };
+    direta.pedidos.set(id, { ok: f => { parar(); ok(f); }, falha: e => { parar(); falha(e); }, progresso: f => { vigiar(); progresso(f); } });
+    vigiar();
+    try { direta.dados.send(JSON.stringify({ t: 'pedir', id })); } catch (e) { direta.pedidos.delete(id); parar(); falha(e); }
+  });
+}
 async function baixarArquivoRemoto(id, nome) {
   if (remoto.carregando === id) return;
   remoto.carregando = id;
   recado('Abrindo ' + nome + '…', 0);
   try {
-    const r = await fetch('/arquivo?id=' + encodeURIComponent(id), { cache: 'no-store' });
-    if (!r.ok) throw new Error('o arquivo ainda não chegou ao servidor');
-    const blob = await r.blob();
-    const res = await window.ModuloUpload.receber([new File([blob], nome, { type: blob.type })]);
+    // primeiro direto de quem apresenta (pela rede local); se não der, pelo servidor
+    let arquivo = null;
+    if (direta.aberta) {
+      try { arquivo = await pedirArquivoDireto(id, f => recado('Abrindo ' + nome + '… ' + Math.round(f * 100) + '%', 0)); }
+      catch (e) { /* tenta pelo servidor */ }
+    }
+    if (!arquivo) {
+      const s = estadoRemoto && estadoRemoto.id === id ? estadoRemoto : null;
+      if (!s || !s.pronto) throw new Error(s && s.grande ? 'grande demais para passar pelo servidor, e a conexão direta não está disponível' : 'o arquivo ainda não chegou ao servidor');
+      const r = await fetch('/arquivo?id=' + encodeURIComponent(id) + QS_SALA, { cache: 'no-store' });
+      if (!r.ok) throw new Error('o arquivo ainda não chegou ao servidor');
+      const blob = await r.blob();
+      arquivo = new File([blob], nome, { type: blob.type });
+    }
+    const res = await window.ModuloUpload.receber([arquivo]);
     if (!res.paginas.length) throw new Error(res.recusados[0] ? res.recusados[0].motivo : 'arquivo vazio');
     remoto.a = { id, nome, caminho: nome, paginas: res.paginas };
     apresentacoes = [remoto.a];
@@ -3406,7 +3770,7 @@ function aplicarEstadoRemoto() {
   if (!s) return;
   if (s.modo === 'pagina') {
     if (!remoto.a || remoto.a.id !== s.id) {
-      if (!s.pronto) recado('Aguardando o arquivo ' + s.nome + '…', 0);
+      if (!s.pronto && !direta.aberta) recado(s.grande ? 'O arquivo ' + s.nome + ' é grande demais para o servidor. Aguardando a conexão direta…' : 'Aguardando o arquivo ' + s.nome + '…', 0);
       else baixarArquivoRemoto(s.id, s.nome);
       pontasRemotas = []; return;
     }
@@ -3645,6 +4009,7 @@ if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !windo
 el('btProcessador').addEventListener('click', trocarProcessador);
 rotuloDuasMaos();
 addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement) return;   // digitando o nome ou o código da sala: as teclas não são atalhos
   if (e.key === 'f' || e.key === 'F') telaCheia();
   else if (ASSISTIR) return;                    // quem assiste não controla nada
   else if (paginaAtual >= 0 && (e.key === 'ArrowRight' || e.key === 'PageDown')) { e.preventDefault(); passarPagina(1); }
@@ -3665,6 +4030,7 @@ if (ASSISTIR) {
   else iniciarAssistir();
 }
 else {
+if (NA_WEB) ligarEntradaDeSala();
 setInterval(salvarAnotacoes, 2000);
 addEventListener('pagehide', salvarAnotacoes);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') salvarAnotacoes(); });
