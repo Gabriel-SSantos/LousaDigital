@@ -141,8 +141,9 @@
     <li><b>Imagens:</b> importe pelo item Imagens do menu (com mouse ou toque). Junte as mãos, com as bases dos mindinhos (pontos 17) a até 300 de distância, por 1,5 s: abre o carrossel, com as imagens e as apresentações de slides. Clique numa imagem para abri-la (dá para abrir várias) ou numa apresentação para abrir os slides; com os slides abertos, o X na bolinha vermelha, abaixo da lixeira, fecha os slides. Pinça sobre a imagem arrasta (a base do mínimo precisa estar do lado de fora do polegar: à direita dele na mão direita, à esquerda na esquerda); pinça na bolinha azul do canto muda o tamanho. Com o mouse, arraste do mesmo jeito.</li>
     <li><b>Zoom no slide:</b> igual às imagens: pinça arrasta, pinça na bolinha azul do canto muda o tamanho, duas pinças fazem zoom a partir do centro. Com o mouse, arraste e use a rodinha. Painel Lousa: "Slide no tamanho original".</li>
     <li><b>Passador de slides:</b> só o mindinho erguido, com a mão inclinada para o mindinho apontar na diagonal para cima (entre 20° e 70°). Com a palma para a câmera, avança um slide; com as costas, volta um. Para passar outro, desfaça e refaça o sinal.</li>
-    <li><b>Lixeira:</b> o botão abaixo de Tela cheia apaga tudo o que está na tela. Arrastar uma imagem até ela (a lixeira cresce e fica vermelha) e soltar apaga só essa imagem.</li>
-    <li><b>Zoom com as duas mãos:</b> pinça com as duas mãos na mesma imagem; afaste para aumentar e aproxime para diminuir, a partir do centro entre as pinças.</li>
+    <li><b>Lixeira:</b> o botão abaixo de Tela cheia apaga tudo o que está na tela. Arrastar uma imagem ou forma até ela (a lixeira cresce e fica vermelha) e soltar apaga só ela.</li>
+    <li><b>Formas:</b> mexem como as imagens: pinça (ou o mouse) arrasta, pinça na bolinha azul do canto muda o tamanho, duas pinças fazem zoom. Com o lápis ligado sobre um slide ou PDF, o mouse só pega a bolinha, para dar para riscar por cima da forma.</li>
+    <li><b>Zoom com as duas mãos:</b> pinça com as duas mãos na mesma imagem ou forma; afaste para aumentar e aproxime para diminuir, a partir do centro entre as pinças.</li>
     <li><b>Marca-texto:</b> painel do lápis (Caneta e traço), botão Marca-texto: o lápis passa a riscar largo e transparente, para destacar o texto (o amarelo fica no painel de cores). Clique de novo para voltar ao lápis comum. A borracha apaga os dois.</li>
     <li><b>Desenhar com mouse, dedo ou caneta:</b> com um slide ou PDF aberto e o lápis (ou o marca-texto) ligado, arraste sobre a página para riscar; o botão direito do mouse apaga. Para rolar enquanto isso, use a rodinha ou dois dedos.</li>
     <li><b>Anotações:</b> o que você desenha sobre um slide ou PDF fica preso à página: rola e muda de zoom junto com ela. Tudo (traços, marca-texto e formas, da lousa e de cada arquivo) fica guardado no navegador e volta ao recarregar. Com um PDF aberto, o botão Baixar PDF anotado gera uma cópia do PDF com as anotações.</li>
@@ -1479,36 +1480,65 @@ function retanguloDaLixeira() { return montarInterface().find(r => r.tipo === 'l
 function sobreLixeira(p) { const r = retanguloDaLixeira(); return !!(p && r && dentroDe(p, r, 12 * K)); }
 function jogarNaLixeira(item) {
   const i = itens.indexOf(item);
-  if (i >= 0) { itens.splice(i, 1); piscaPor.set('lixeira:', piscaAte = performance.now() + 300); recado('Imagem apagada.', 1500); pedirDesenho(); }
+  if (i >= 0) { itens.splice(i, 1); piscaPor.set('lixeira:', piscaAte = performance.now() + 300); recado(item.tipo === 'imagem' ? 'Imagem apagada.' : 'Forma apagada.', 1500); pedirDesenho(); }
 }
+// Imagens e formas podem ser jogadas na lixeira; o slide não
+const vaiParaLixeira = it => it.tipo === 'imagem' || ehForma(it);
 // Algo está sendo arrastado por cima da lixeira? (ela fica com contorno vermelho)
 function arrastandoSobreLixeira() {
-  if (arrastePonteiro && arrastePonteiro.item.tipo === 'imagem' && sobreLixeira(arrastePonteiro.ultimo)) return true;
-  return maos.some(m => m.pinca && m.agarrada && m.agarrada.modo !== 'duplo' && m.agarrada.item.tipo === 'imagem' && sobreLixeira(m.pontoPinca));
+  if (arrastePonteiro && vaiParaLixeira(arrastePonteiro.item) && sobreLixeira(arrastePonteiro.ultimo)) return true;
+  return maos.some(m => m.pinca && m.agarrada && m.agarrada.modo !== 'duplo' && vaiParaLixeira(m.agarrada.item) && sobreLixeira(m.pontoPinca));
 }
 
-function imagemEm(x, y) {                     // { item, modo: 'tamanho' | 'mover' } sob o ponto, a de cima primeiro
+const ehForma = it => !!MEIA[it.tipo];
+// Bolinha azul da forma: no canto de baixo à direita do retângulo dela, girando junto com a forma
+function alcaDaForma(f) {
+  const [mw, mh] = MEIA[f.tipo], e = f.esc || 1, r = f.rot || 0, ax = mw * e, ay = mh * e;
+  return [f.x + ax * Math.cos(r) - ay * Math.sin(r), f.y + ax * Math.sin(r) + ay * Math.cos(r)];
+}
+// { item, modo: 'tamanho' | 'mover' } sob o ponto: imagens e formas, a de cima primeiro.
+// soAlca: só a bolinha do canto conta (com o lápis ligado, o resto da forma fica livre para desenhar por cima).
+function imagemEm(x, y, soAlca) {
   for (let i = itens.length - 1; i >= 0; i--) {
     const it = itens[i];
-    if (it.tipo !== 'imagem') continue;
-    if (Math.hypot(x - (it.x + it.w), y - (it.y + it.h)) <= RAIO_ALCA * K * 2.2) return { item: it, modo: 'tamanho' };
-    if (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return { item: it, modo: 'mover' };
+    if (it.tipo === 'imagem') {
+      if (Math.hypot(x - (it.x + it.w), y - (it.y + it.h)) <= RAIO_ALCA * K * 2.2) return { item: it, modo: 'tamanho' };
+      if (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return { item: it, modo: 'mover' };
+    } else if (ehForma(it)) {
+      const a = alcaDaForma(it);
+      if (Math.hypot(x - a[0], y - a[1]) <= RAIO_ALCA * K * 2.2) return { item: it, modo: 'tamanho' };
+      if (!soAlca && formaEm(x, y, it)) return { item: it, modo: 'mover' };
+    }
   }
   return null;
 }
 
-// Começa a mover ou a mudar o tamanho de uma imagem a partir do ponto p
+// Começa a mover ou a mudar o tamanho de uma imagem (ou forma) a partir do ponto p
 function pegarImagem(alvo, p) {
   const it = alvo.item;
+  if (ehForma(it)) {                          // a forma muda de tamanho a partir do centro, na direção da bolinha
+    const a = alcaDaForma(it), d = Math.max(1, Math.hypot(a[0] - it.x, a[1] - it.y));
+    return { item: it, modo: alvo.modo, dx: it.x - p[0], dy: it.y - p[1], p0: p, esc0: it.esc || 1, dir: [(a[0] - it.x) / d, (a[1] - it.y) / d], diag0: d };
+  }
   const d = Math.hypot(it.w, it.h);
   return { item: it, modo: alvo.modo, dx: it.x - p[0], dy: it.y - p[1], p0: p, w0: it.w, h0: it.h, dir: [it.w / d, it.h / d], diag0: d };
 }
+// Tamanho mínimo da forma: o lado maior não fica menor que 40 (como as imagens, que param em 80)
+const escMinima = f => 40 * K / (2 * Math.max(...MEIA[f.tipo]));
 
 // Aplica o movimento do ponto p à imagem presa. O tamanho cresce ou encolhe com a bolinha, mantendo a proporção,
 // com o canto de cima à esquerda parado; só uma parte do movimento vale (SENSIBILIDADE_TAMANHO), para o ajuste ser fino.
 function moverImagem(g, p) {
   const it = g.item;
   g.ultimo = p;
+  if (ehForma(it)) {
+    if (g.modo === 'mover') { it.x = Math.min(W - 20, Math.max(20, p[0] + g.dx)); it.y = Math.min(H - 20, Math.max(20, p[1] + g.dy)); }
+    else {
+      const avanço = (p[0] - g.p0[0]) * g.dir[0] + (p[1] - g.p0[1]) * g.dir[1];
+      it.esc = Math.max(escMinima(it), g.esc0 * (g.diag0 + avanço * SENSIBILIDADE_TAMANHO) / g.diag0);
+    }
+    pedirDesenho(); return;
+  }
   if (g.modo === 'mover') {
     it.x = Math.min(W - 40, Math.max(40 - it.w, p[0] + g.dx));
     it.y = Math.min(H - 40, Math.max(40 - it.h, p[1] + g.dy));
@@ -2235,14 +2265,15 @@ function inclinacaoPalma(lm, palma) {
   return ((lm[5][1] + lm[6][1]) - (lm[3][1] + lm[4][1])) / 2 / palma;
 }
 
-function formaEm(x, y) {
+function formaEm(x, y, so) {         // so: testa só esta forma
   for (let i = itens.length - 1; i >= 0; i--) {
-    const f = itens[i];
-    if (f.tipo === 'traco') continue;
+    const f = so || itens[i];
+    if (!ehForma(f)) { if (so) return null; continue; }
     const [mw, mh] = MEIA[f.tipo];
     const r = -(f.rot || 0), e = f.esc || 1, dx = x - f.x, dy = y - f.y;     // traz o ponto para o referencial da forma girada
     const lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r);
     if (Math.abs(lx) <= mw * e + 25 && Math.abs(ly) <= mh * e + 25) return f;
+    if (so) return null;
   }
   return null;
 }
@@ -2414,7 +2445,7 @@ function soltarPinca(m) {
   if (duplo && duplo.maos.includes(m)) {                       // a outra mão continua sozinha, arrastando
     const o = duplo.maos.find(x => x !== m); duplo = null;
     if (o.agarrada) o.agarrada = pegarImagem({ item: g.item, modo: 'mover' }, o.pontoPinca);
-  } else if (g && g.modo === 'mover' && g.item.tipo === 'imagem' && sobreLixeira(g.ultimo)) jogarNaLixeira(g.item);   // o slide não vai para a lixeira   // vale onde a pinça estava antes de abrir
+  } else if (g && g.modo === 'mover' && vaiParaLixeira(g.item) && sobreLixeira(g.ultimo)) jogarNaLixeira(g.item);   // vale onde a pinça estava antes de abrir
   pedirDesenho();
 }
 
@@ -2424,7 +2455,9 @@ function soltarPinca(m) {
 let duplo = null;                   // { item, maos, d0, w0, h0, fx, fy }
 function iniciarZoomDuplo(item, a, b) {
   const pa = a.pontoPinca, pb = b.pontoPinca, c = meio(pa, pb);
-  duplo = { item, maos: [a, b], d0: Math.max(1, dist(pa, pb)), w0: item.w, h0: item.h, fx: (c[0] - item.x) / item.w, fy: (c[1] - item.y) / item.h };
+  duplo = ehForma(item)
+    ? { item, maos: [a, b], d0: Math.max(1, dist(pa, pb)), esc0: item.esc || 1, ox: (item.x - c[0]) / (item.esc || 1), oy: (item.y - c[1]) / (item.esc || 1) }
+    : { item, maos: [a, b], d0: Math.max(1, dist(pa, pb)), w0: item.w, h0: item.h, fx: (c[0] - item.x) / item.w, fy: (c[1] - item.y) / item.h };
   a.agarrada = { item, modo: 'duplo' }; b.agarrada = { item, modo: 'duplo' };
   if (itens.includes(item)) { itens.splice(itens.indexOf(item), 1); itens.push(item); }
 }
@@ -2439,6 +2472,11 @@ function processarZoomDuplo() {
   }
   const c = meio(a.pontoPinca, b.pontoPinca), it = duplo.item;
   const razao = dist(a.pontoPinca, b.pontoPinca) / duplo.d0;
+  if (ehForma(it)) {                           // a forma cresce a partir do centro entre as pinças
+    it.esc = Math.max(escMinima(it), duplo.esc0 * (1 + (razao - 1) * SENSIBILIDADE_TAMANHO));
+    it.x = c[0] + duplo.ox * it.esc; it.y = c[1] + duplo.oy * it.esc;
+    pedirDesenho(); return;
+  }
   const k = Math.max(80 * K / Math.max(duplo.w0, duplo.h0), 1 + (razao - 1) * SENSIBILIDADE_TAMANHO);
   it.w = duplo.w0 * k; it.h = duplo.h0 * k;
   it.x = c[0] - duplo.fx * it.w; it.y = c[1] - duplo.fy * it.h;
@@ -2770,6 +2808,10 @@ function desenharItens(lista, semAlcas) {
     ctx.globalAlpha = 0.16; ctx.fillStyle = it.cor; ctx.fill(); ctx.globalAlpha = 1;
     ctx.strokeStyle = it.cor; ctx.lineWidth = it.tam / e; ctx.stroke();      // a espessura do contorno não cresce junto
     ctx.restore();
+    if (semAlcas) continue;
+    const a = alcaDaForma(it);                                                  // bolinha do tamanho, como nas imagens
+    ctx.beginPath(); ctx.arc(a[0], a[1], RAIO_ALCA * K, 0, Math.PI * 2);
+    ctx.fillStyle = '#1f5fe0'; ctx.fill(); ctx.lineWidth = 3 * K; ctx.strokeStyle = '#ffffff'; ctx.stroke();
   }
 }
 
@@ -3869,11 +3911,14 @@ tela.addEventListener('pointerdown', e => {      // o mouse e o toque clicam nos
   if (pontoDeToque(e, p)) return;
   // Com o lápis ligado e um slide ou PDF aberto, o mouse, o dedo e a caneta da tela desenham (botão direito apaga).
   // Imagens soltas e a bolinha azul do canto continuam respondendo ao arraste.
-  if (canetaAtiva && paginaAtual >= 0 && !botaoEm(p[0], p[1]) && !imagemEm(p[0], p[1])) {
+  // Nas formas, só a bolinha: dá para riscar por cima delas.
+  const comLapis = canetaAtiva && paginaAtual >= 0;
+  const objeto = imagemEm(p[0], p[1]), soAlca = comLapis && objeto && ehForma(objeto.item) ? imagemEm(p[0], p[1], true) : objeto;
+  if (comLapis && !botaoEm(p[0], p[1]) && !soAlca) {
     const canto = slideEm(p[0], p[1]);
     if (!(canto && canto.modo === 'tamanho')) { comecarTracoPonteiro(e, p); return; }
   }
-  const alvo = botaoEm(p[0], p[1]) ? null : alvoEm(p[0], p[1]);
+  const alvo = botaoEm(p[0], p[1]) ? null : comLapis ? soAlca || slideEm(p[0], p[1]) : alvoEm(p[0], p[1]);
   if (alvo) {
     arrastePonteiro = pegarImagem(alvo, p);
     if (itens.includes(alvo.item)) { itens.splice(itens.indexOf(alvo.item), 1); itens.push(alvo.item); }
@@ -3909,7 +3954,7 @@ const soltarPonteiro = e => {
   if (panPonteiro && panPonteiro.ids.includes(e.pointerId)) { panPonteiro = null; return; }
   if (tracoPonteiro && tracoPonteiro.id === e.pointerId) { normalizarTraco(tracoPonteiro.traco); tracoPonteiro = null; pedirDesenho(); return; }
   if (!arrastePonteiro) return;
-  if (arrastePonteiro.modo === 'mover' && arrastePonteiro.item.tipo === 'imagem' && sobreLixeira(arrastePonteiro.ultimo)) jogarNaLixeira(arrastePonteiro.item);
+  if (arrastePonteiro.modo === 'mover' && vaiParaLixeira(arrastePonteiro.item) && sobreLixeira(arrastePonteiro.ultimo)) jogarNaLixeira(arrastePonteiro.item);
   arrastePonteiro = null; pedirDesenho();
 };
 tela.addEventListener('pointerup', soltarPonteiro);
