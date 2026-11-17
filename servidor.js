@@ -335,6 +335,8 @@ setInterval(() => {
     // modo web: sala esquecida (sem apresentador e sem ninguém assistindo há muito tempo) some, com os arquivos
     if (WEB && !s.aberta && !s.assistindo.size && agora - Math.max(s.visto, s.criada) > SALA_ESQUECIDA) salas.delete(codigo);
   }
+  // endereços que não criam sala há mais de uma hora saem da contagem (senão o mapa só cresce enquanto o servidor estiver no ar)
+  for (const [ip, lista] of criadasPorIp) if (!lista.length || agora - lista[lista.length - 1] > 60 * 60 * 1000) criadasPorIp.delete(ip);
 }, 2000);
 
 function mostrarEnderecos() {

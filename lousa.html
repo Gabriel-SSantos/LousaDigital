@@ -20,7 +20,7 @@
   .stage { position: fixed; inset: 0; background: #fbfbf8; overflow: hidden; }
   #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); pointer-events: none; }
   #camadaPagina { position: absolute; inset: 0; pointer-events: none; }
-  #camadaPagina > canvas, #camadaPagina > .docPdf { position: absolute; width: auto; height: auto; }   /* posição e tamanho vêm do zoom do slide (aplicarVistaSlide) */
+  #camadaPagina > canvas, #camadaPagina > img, #camadaPagina > .docPdf { position: absolute; width: auto; height: auto; max-width: none; }   /* posição e tamanho vêm do zoom do slide (aplicarVistaSlide) */
   #tela { position: absolute; inset: 0; }
   /* A lousa ocupa a janela inteira, em qualquer formato: deitada, em pé, celular ou computador */
   canvas { display: block; width: 100%; height: 100%; touch-action: none; }
@@ -31,6 +31,7 @@
   .barra { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); left: calc(10px + env(safe-area-inset-left, 0px));
            display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; pointer-events: none; }
   .barra button, .barra span { pointer-events: auto; background: rgba(20, 23, 32, 0.82); color: #eceef4; }
+  .barra button.desligado { color: #9aa0ad; text-decoration: line-through; }
   .barra span { border-radius: 4px; padding: 8px 10px; font-variant-numeric: tabular-nums; }
   .barra [hidden] { display: none; }
   #recado { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); max-width: min(520px, calc(100vw - 20px)); box-sizing: border-box;
@@ -128,6 +129,7 @@
   <button id="btGravar" type="button" title="Grava esta aba com o som do microfone e baixa o vídeo ao parar">Gravar</button>
   <button id="btApp" type="button" hidden title="Aplicativo para transmitir pelo Wi-Fi da sala, sem internet">Baixar o app</button>
   <button id="btAssistirSala" type="button" hidden title="Assistir à sala de outra pessoa pelo código">Assistir uma sala</button>
+  <button id="btMaos" type="button" title="Liga ou desliga a câmera e o rastreamento das mãos (desligado, a lousa fica mais leve; use mouse, toque ou caneta)">Mãos: ligado</button>
   <button id="btAjuda" type="button">Ajuda</button>
   <button id="btCheia" type="button">Tela cheia</button>
   <button id="btSair" type="button" hidden>Sair da sala</button>
@@ -155,6 +157,7 @@
     <li><b>Transmitir para a rede:</b> clique em Transmitir: o servidor da rede liga sozinho (depois de rodar <code>./instalar.sh</code> uma vez; sem isso, rode <code>node servidor.js</code>) e o QR Code abre. Os outros aparelhos da mesma rede leem o QR Code (ou abrem o endereço com o IP que aparece no selo "Ao vivo") e acompanham o arquivo, a página, a rolagem, o zoom, as anotações e o seu indicador, sem poder mexer em nada.</li>
     <li><b>Gravar a aula:</b> clique em Gravar e, no aviso do navegador, escolha esta aba (no Chrome ela já vem sugerida; marque "Compartilhar áudio da guia" se quiser o som da página). Se o navegador pedir o microfone, permita para gravar sua voz. Grava tudo o que aparece: câmera, slides, PDF e anotações. Clique em Parar (ou em "Parar compartilhamento" do navegador) e o vídeo é baixado: MP4 quando o navegador consegue, senão WebM.</li>
     <li><b>Quem está assistindo:</b> quem abre pelo QR Code digita o nome antes de entrar (dá para trocar tocando no selo "Assistindo"). Clique no selo "Ao vivo" para ver a lista com o nome de cada um e há quanto tempo está assistindo; quando alguém entra ou sai, aparece um aviso no canto. Os nomes só aparecem para quem apresenta. Com o servidor hospedado num domínio (<code>node servidor.js --web</code>), Transmitir cria uma sala com código e qualquer pessoa com internet assiste pelo QR Code ou digitando o código em "Assistir uma sala". Quem assiste sai pelo botão Sair da sala; quando a transmissão acaba, todos saem sozinhos e ninguém entra numa sala que não está mais no ar.</li>
+    <li><b>Desligar as mãos:</b> o botão Mãos, na barra de cima, desliga a câmera e o rastreamento das mãos. A lousa fica bem mais leve (bom para computador fraco ou celular com pouca bateria) e continua funcionando com mouse, toque ou caneta. A escolha fica guardada para as próximas vezes.</li>
     <li><b>Duas mãos:</b> no celular começa com uma mão só, que é bem mais rápido; o botão abaixo liga a segunda.</li>
   </ul>
   <p style="margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start"><button id="btDuasMaos" type="button">Duas mãos</button><button id="btProcessador" type="button">Processador</button></p>
@@ -297,6 +300,26 @@
   function novoCanvas(l, a) {
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(l)); c.height = Math.max(1, Math.round(a));
+    return c;
+  }
+  // Um slide desenhado num canvas de 1600×900 ocupa ~6 MB de memória enquanto existir (e todos os slides de todas as
+  // apresentações abertas ficam guardados para o carrossel). Como PNG num <img>, ocupa uma fração disso: o navegador guarda
+  // o arquivo comprimido e só descomprime o slide que está aparecendo.
+  async function imagemLeve(canvas) {
+    try {
+      const blob = await new Promise(ok => canvas.toBlob(ok, 'image/png'));
+      if (!blob) return canvas;
+      const img = new Image(), url = URL.createObjectURL(blob);
+      img.src = url;
+      try { await img.decode(); } catch (e) { URL.revokeObjectURL(url); return canvas; }
+      img.dataset.url = url;
+      canvas.width = canvas.height = 0;                            // solta a memória do canvas
+      return img;
+    } catch (e) { return canvas; }
+  }
+  function miniatura(fonte, lado) {
+    const k = Math.min(1, lado / fonte.width), c = novoCanvas(fonte.width * k, fonte.height * k);
+    c.getContext('2d').drawImage(fonte, 0, 0, c.width, c.height);
     return c;
   }
 
@@ -977,7 +1000,12 @@
       } catch (e) {
         c.avisos.add('O slide não pôde ser desenhado por completo (' + (e && e.message || 'erro') + ').');
       }
-      paginas.push({ nome: arquivo.name + ' · slide ' + (i + 1), origem: 'pptx', arquivo: arquivo.name, indice: i, largura: canvas.width, altura: canvas.height, imagem: canvas, avisos: Array.from(c.avisos) });
+      const largura = canvas.width, altura = canvas.height;
+      const capa = i === 0 ? { largura, altura, imagem: miniatura(canvas, 360) } : null;   // miniatura do carrossel
+      const imagem = await imagemLeve(canvas);
+      paginas.push({ nome: arquivo.name + ' · slide ' + (i + 1), origem: 'pptx', arquivo: arquivo.name, indice: i, largura, altura, imagem, avisos: Array.from(c.avisos),
+        ...(capa ? { capa } : {}),
+        liberar() { if (imagem.dataset && imagem.dataset.url) URL.revokeObjectURL(imagem.dataset.url); } });
       await new Promise(r => setTimeout(r, 0));                      // deixa a tela respirar entre um slide e outro
     }
     return paginas;
@@ -1070,6 +1098,11 @@
 
     const pg = { nome: arquivo.name, origem: 'pdf', arquivo: arquivo.name, indice: 0, largura: LARGURA_PDF, altura, imagem: caixa, avisos: [], capa, original: arquivo,
       numPaginas: folhas.length, folhas: folhas.map(f => ({ y: f.y, h: f.h, pw: f.pw, ph: f.ph })) };
+    // O mesmo arquivo aberto de novo: a versão anterior solta as páginas desenhadas e o documento do leitor de PDF
+    pg.liberar = () => {
+      for (const f of folhas) { f.desenhando = null; f.canvas.width = f.canvas.height = 1; const j = pdfsDesenhados.indexOf(f); if (j >= 0) pdfsDesenhados.splice(j, 1); }
+      try { doc.destroy(); } catch (e) { /* já liberado */ }
+    };
     // Desenha a página i num canvas novo, do tamanho em que aparece no documento (para gerar o PDF anotado)
     pg.renderizar = async i => {
       const f = folhas[i], c = novoCanvas(LARGURA_PDF, f.h), g = c.getContext('2d');
@@ -1323,7 +1356,10 @@ function adicionarApresentacao(caminho, pgs) {
     if (anotacoesCarregadas) anotacoesSalvas = coletarAnotacoes();
   }
   aplicarAnotacoesSalvas(a);
-  if (i >= 0) apresentacoes[i] = a; else apresentacoes.push(a);
+  if (i >= 0) {                                   // a versão anterior sai da memória (as anotações dela já foram copiadas)
+    for (const pg of apresentacoes[i].paginas) { anotacoes.delete(pg); vistas.delete(pg); try { if (pg.liberar) pg.liberar(); } catch (e) { /* segue */ } }
+    apresentacoes[i] = a;
+  } else apresentacoes.push(a);
   chavePainel = null; pedirDesenho();
   return a;
 }
@@ -1729,6 +1765,27 @@ function itensNoDocumento(pg, lista, largura) {
   return lista.map(it => transformarItem(clonarItem(it), x => (x - a.x) * f, y => (y - a.y) * f, f));
 }
 const arred = n => Math.round(n * 10) / 10;
+// Resumo barato do que está desenhado, sem percorrer os pontos: muda quando um traço ganha pontos, é alisado ou apagado,
+// quando algo é criado, movido, girado ou muda de tamanho, e quando a lista (página) muda. Com o resumo igual, as anotações
+// são as mesmas, e o salvamento e a transmissão não precisam montar de novo o texto de todas elas (com muitos traços, isso
+// gerava megabytes de lixo na memória a cada poucos instantes, e a página ia ficando lenta até travar).
+const idsDeObjeto = new WeakMap(); let proximoIdObjeto = 1;
+function idDeObjeto(o) { let id = idsDeObjeto.get(o); if (!id) idsDeObjeto.set(o, id = proximoIdObjeto++); return id; }
+const misturar = (h, v) => Math.imul(h ^ (Math.round((v || 0) * 10) | 0), 16777619) >>> 0;
+function assinaturaItens(lista, h = 2166136261) {
+  h = misturar(misturar(h, idDeObjeto(lista)), lista.length);
+  for (const it of lista) {
+    if (it.tipo === 'traco') {
+      const p = it.pontos, n = p.length;
+      h = misturar(misturar(misturar(h, n), it.tam), it.v);
+      if (n) h = misturar(misturar(misturar(misturar(h, p[0][0]), p[0][1]), p[n - 1][0]), p[n - 1][1]);
+    } else h = misturar(misturar(misturar(misturar(misturar(misturar(h, it.x), it.y), it.esc), it.rot), it.tam), (it.w || 0) + (it.h || 0));
+    h = misturar(h, it.marca ? 1 : 0);
+    const c = it.cor || '';
+    for (let i = 0; i < c.length; i++) h = misturar(h, c.charCodeAt(i));
+  }
+  return h;
+}
 function paraGuardar(it) {
   if (it.tipo === 'traco') return Object.assign({ tipo: 'traco', cor: it.cor, tam: arred(it.tam), pontos: it.pontos.map(p => [arred(p[0]), arred(p[1])]) }, it.marca ? { marca: true } : {});
   return { tipo: it.tipo, x: arred(it.x), y: arred(it.y), cor: it.cor, tam: arred(it.tam), rot: it.rot || 0, esc: it.esc || 1 };
@@ -1773,13 +1830,23 @@ async function carregarAnotacoes() {
   for (const a of apresentacoes) if (a.paginas !== paginas) aplicarAnotacoesSalvas(a);   // enviados enquanto carregava
   ultimoSalvo = JSON.stringify(coletarAnotacoes());
 }
+let assinaturaSalva = null;
+function assinaturaAnotacoes() {
+  let h = misturar(assinaturaItens(itens), paginaAtual + 1);
+  if (paginaAtual >= 0) h = assinaturaItens(itensSemPagina, h);
+  for (const a of apresentacoes) h = misturar(h, idDeObjeto(a.paginas));
+  return h;
+}
 function salvarAnotacoes() {
   if (!anotacoesCarregadas) return;
+  const assinatura = assinaturaAnotacoes();
+  if (assinatura === assinaturaSalva && ultimoSalvo) return;      // nada mudou desde o último salvamento
+  assinaturaSalva = assinatura;
   const dados = coletarAnotacoes(), txt = JSON.stringify(dados);
   if (txt === ultimoSalvo) return;
   ultimoSalvo = txt; anotacoesSalvas = dados;
   noBanco('readwrite', st => st.put(txt, CHAVE_ANOTACOES)).catch(() => {
-    ultimoSalvo = '';
+    ultimoSalvo = ''; assinaturaSalva = null;
     if (!avisouFalhaAoSalvar) { avisouFalhaAoSalvar = true; recado('Não consegui guardar as anotações no navegador (sem espaço ou modo anônimo). Elas valem só até fechar a página.', 6000); }
   });
 }
@@ -2205,6 +2272,48 @@ async function manterTelaAcesa() {
   try { if ('wakeLock' in navigator && document.visibilityState === 'visible') telaAcesa = await navigator.wakeLock.request('screen'); } catch (e) { /* sem suporte ou negado */ }
 }
 
+// ---------- liga e desliga o rastreamento das mãos ----------
+// Desligado: a câmera é fechada e o rastreador sai da memória (e da placa gráfica). A lousa segue com mouse, toque e caneta,
+// e o laço de desenho só trabalha quando algo muda. A escolha fica guardada no navegador.
+const CHAVE_RASTREIO = 'quadro-no-ar.rastreamento';
+let rastreio = (() => { try { return localStorage.getItem(CHAVE_RASTREIO) !== 'desligado'; } catch (e) { return true; } })();
+let mudandoRastreio = null;
+function rotuloRastreio() {
+  const b = el('btMaos'); if (!b) return;
+  b.textContent = rastreio ? 'Mãos: ligado' : 'Mãos: desligado';
+  b.classList.toggle('desligado', !rastreio);
+  b.setAttribute('aria-pressed', String(rastreio));
+}
+function fecharCamera() {
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+  ultimoTempo = -1;
+}
+async function ligarRastreio() {
+  aviso('Carregando o rastreador de mãos…', false);
+  try { if (!detector) await carregarDetector(); }
+  catch (e) { if (rastreio) aviso('Não consegui carregar o rastreador de mãos. Verifique a conexão com a internet e recarregue a página.', false); return; }
+  if (!rastreio) { desligarRastreio(); return; }   // desligado enquanto carregava: solta o que acabou de carregar
+  await abrirCamera();
+}
+function desligarRastreio() {
+  fecharCamera();
+  descartar('GPU'); descartar('CPU'); detector = null; delegado = null;
+  maos = []; el('status').hidden = true;
+  if (telaDeteccao) telaDeteccao.width = telaDeteccao.height = 0;
+  if (telaDeteccaoMem) telaDeteccaoMem.width = telaDeteccaoMem.height = 0;
+  telaDeteccao = telaDeteccaoMem = null;
+  ligarLaco(); pedirDesenho();
+}
+async function alternarRastreio() {
+  rastreio = !rastreio; rotuloRastreio();
+  try { localStorage.setItem(CHAVE_RASTREIO, rastreio ? 'ligado' : 'desligado'); } catch (e) { /* vale só nesta visita */ }
+  if (!rastreio) { desligarRastreio(); return; }
+  if (mudandoRastreio) await mudandoRastreio.catch(() => {});
+  if (!rastreio) return;
+  mudandoRastreio = ligarRastreio().finally(() => { mudandoRastreio = null; });
+}
+
 async function abrirCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     aviso('Este endereço não tem acesso à câmera. No celular a página precisa estar hospedada em um endereço https://; abrir o arquivo direto do aparelho não funciona.', false);
@@ -2216,11 +2325,13 @@ async function abrirCamera() {
     const pedido = MOVEL ? { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
                          : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } };
     const stream = await navigator.mediaDevices.getUserMedia({ video: pedido, audio: false });
+    if (!rastreio) { stream.getTracks().forEach(t => t.stop()); return; }        // desligaram as mãos enquanto a câmera abria
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());     // a câmera aberta antes não fica ligada por baixo
     video.srcObject = stream;
     await video.play();
     manterTelaAcesa();
     el('status').hidden = true;
-    requestAnimationFrame(quadro);
+    ligarLaco();
   } catch (e) {
     const negado = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
     aviso(negado ? 'A câmera foi bloqueada. Libere o acesso no navegador e tente de novo.'
@@ -2766,6 +2877,7 @@ function normalizarTraco(t) {
     r = r.map((q, i) => i === 0 || i === r.length - 1 ? q : [(r[i - 1][0] + 2 * q[0] + r[i + 1][0]) / 4, (r[i - 1][1] + 2 * q[1] + r[i + 1][1]) / 4]);
   }
   t.pontos = simplificar(r, 0.5);
+  t.v = (t.v || 0) + 1;                           // o traço mudou por dentro (ver assinaturaItens)
 }
 
 function desenharTraco(t) {
@@ -3085,12 +3197,15 @@ function guardarPainel(agora, sobre) {
 }
 
 // Anel de espera: fundo claro e um arco escuro que se completa em 2 s
+// Um laço só: abrir a câmera de novo (botão de tentar outra vez) não pode criar um segundo laço rodando junto
+let lacoLigado = false;
+function ligarLaco() { if (!lacoLigado) { lacoLigado = true; requestAnimationFrame(quadro); } }
 function quadro() {
   requestAnimationFrame(quadro);
-  if (video.readyState < 2 && !ASSISTIR) return;
+  if (video.readyState < 2 && !ASSISTIR && rastreio) return;
   const agora = performance.now();
 
-  if (!ASSISTIR && video.currentTime !== ultimoTempo) {      // chegou um quadro novo da câmera
+  if (!ASSISTIR && rastreio && detector && video.readyState >= 2 && video.currentTime !== ultimoTempo) {      // chegou um quadro novo da câmera
     ultimoTempo = video.currentTime;
     const t0 = performance.now();
     let res;
@@ -3163,7 +3278,7 @@ function quadro() {
 // O apresentador publica, várias vezes por segundo e só quando muda: o arquivo aberto, a página, o retângulo do documento
 // que aparece na tela dele, as pontas dos indicadores e as anotações (nas medidas do documento). Quem assiste recebe
 // tudo pelo servidor e mostra o mesmo trecho, ajustado ao tamanho da própria tela, sem poder mexer.
-let transmitindo = false, seqTx = Date.now(), ultimoEstadoTx = '', ultimaAnotTx = '', ultimaAnotT = 0;
+let transmitindo = false, seqTx = Date.now(), ultimoEstadoTx = '', ultimaAnotTx = '', ultimaAnotT = 0, assinaturaAnotTx = null;
 const enviados = new Map();         // id da apresentação -> 'ok' | 'enviando' | instante da última falha
 let promessaTransmissao = null;
 function iniciarTransmissao(abrirQr = true) {          // uma só tentativa por vez (ao abrir a página e pelo botão)
@@ -3571,6 +3686,12 @@ function transmitir() {
   const agora = performance.now();
   if (agora - ultimaAnotT < 150) return;
   ultimaAnotT = agora;
+  // as anotações só são montadas de novo quando mudaram (ultimaAnotTx vazio = publicar de novo de qualquer jeito)
+  let assinatura = misturar(misturar(assinaturaItens(itens), a ? idDeObjeto(a) : -1), paginaAtual + 1);
+  assinatura = misturar(misturar(assinatura, W), H);
+  if (pg && pg.ancora) assinatura = misturar(misturar(misturar(assinatura, pg.ancora.x), pg.ancora.y), pg.ancora.w);
+  if (ultimaAnotTx && assinatura === assinaturaAnotTx) return;
+  assinaturaAnotTx = assinatura;
   const lista = itens.filter(it => it.tipo !== 'imagem');
   const anot = a ? { id: a.id, indice: paginaAtual, itens: itensNoDocumento(pg, lista, LARGURA_DOC).map(paraGuardar) }
                  : { lousa: true, W, H, itens: lista.map(paraGuardar) };
@@ -3636,7 +3757,7 @@ function iniciarAssistir() {
   if (nome) conectar(); else perguntarNome();
   addEventListener('resize', () => setTimeout(() => { aplicarEstadoRemoto(); aplicarAnotRemota(); }, 50));
   recado('Aguardando quem apresenta…', 0);
-  requestAnimationFrame(quadro);
+  ligarLaco();
 }
 // ----- fora da sala -----
 // O saguão tem endereço próprio (?saguao=motivo): recarregar a página não põe ninguém de volta na sala.
@@ -3961,7 +4082,22 @@ tela.addEventListener('pointerup', soltarPonteiro);
 tela.addEventListener('pointercancel', soltarPonteiro);
 // Gravação de tela: grava a própria aba (câmera, páginas e anotações como aparecem) com getDisplayMedia,
 // mistura o som da aba (se compartilhado) com o microfone e baixa o vídeo ao parar.
-const gravacao = { gravador: null, fluxos: [], audio: null, partes: [], tipo: '', inicio: 0, relogio: 0 };
+const gravacao = { gravador: null, fluxos: [], audio: null, partes: [], disco: null, tipo: '', inicio: 0, relogio: 0 };
+// O vídeo vai sendo escrito no disco, no armazenamento privado do navegador, em vez de se acumular na memória
+// (a 5 Mbit/s, uma hora de aula são mais de 2 GB: na memória, a página travava). Sem esse armazenamento, fica na memória.
+const PREFIXO_GRAVACAO = 'gravacao-';
+async function abrirGravacaoEmDisco() {
+  try {
+    if (!navigator.storage || !navigator.storage.getDirectory || !window.FileSystemFileHandle || !('createWritable' in FileSystemFileHandle.prototype)) return null;
+    const pasta = await navigator.storage.getDirectory();
+    for await (const nome of pasta.keys()) {       // sobras de gravações antigas (página fechada no meio, por exemplo)
+      const t = Number(nome.slice(PREFIXO_GRAVACAO.length));
+      if (nome.startsWith(PREFIXO_GRAVACAO) && Date.now() - t > 10 * 60 * 1000) pasta.removeEntry(nome).catch(() => {});
+    }
+    const nome = PREFIXO_GRAVACAO + Date.now(), arq = await pasta.getFileHandle(nome, { create: true });
+    return { pasta, nome, arq, escrita: await arq.createWritable(), fila: Promise.resolve(), falhou: false };
+  } catch (e) { return null; }
+}
 function rotuloGravacao() {
   const b = el('btGravar'), ligado = !!gravacao.gravador;
   b.classList.toggle('gravando', ligado);
@@ -3999,13 +4135,27 @@ async function alternarGravacao() {
   try { gravador = new MediaRecorder(fluxo, gravacao.tipo ? { mimeType: gravacao.tipo, videoBitsPerSecond: 5e6 } : {}); }
   catch (e) { encerrarFluxosGravacao(); recado('Este navegador não consegue gravar o vídeo (' + (e.message || e.name) + ').', 6000); return; }
   gravacao.partes = [];
-  gravador.ondataavailable = e => { if (e.data && e.data.size) gravacao.partes.push(e.data); };
-  gravador.onstop = () => {
+  const disco = gravacao.disco = await abrirGravacaoEmDisco();
+  gravador.ondataavailable = e => {
+    if (!e.data || !e.data.size) return;
+    if (!disco || disco.falhou) { gravacao.partes.push(e.data); return; }
+    const pedaco = e.data;
+    disco.fila = disco.fila.then(() => disco.escrita.write(pedaco)).catch(() => { disco.falhou = true; gravacao.partes.push(pedaco); });
+  };
+  gravador.onstop = async () => {
     encerrarFluxosGravacao();
     clearInterval(gravacao.relogio);
-    gravacao.gravador = null; rotuloGravacao();
+    gravacao.gravador = null; gravacao.disco = null; rotuloGravacao();
     const tipo = (gravador.mimeType || gravacao.tipo || 'video/webm').split(';')[0];
-    const blob = new Blob(gravacao.partes, { type: tipo });
+    let blob;
+    if (disco && !disco.falhou) {
+      try { await disco.fila; await disco.escrita.close(); blob = new Blob([await disco.arq.getFile()], { type: tipo }); }
+      catch (e) { disco.falhou = true; }
+    }
+    if (!blob || !blob.size) {
+      if (disco) disco.pasta.removeEntry(disco.nome).catch(() => {});
+      blob = new Blob(gravacao.partes, { type: tipo });
+    } else if (disco) setTimeout(() => disco.pasta.removeEntry(disco.nome).catch(() => {}), 120000);   // depois de baixar, sai do disco
     gravacao.partes = [];
     if (!blob.size) { recado('A gravação ficou vazia.', 4000); return; }
     const d = new Date(), dois = n => String(n).padStart(2, '0');
@@ -4069,6 +4219,7 @@ el('btProx').addEventListener('click', () => passarPagina(1));
 el('btFechar').addEventListener('click', fecharPaginas);
 el('btBaixar').addEventListener('click', baixarPdfAnotado);
 if (ASSISTIR) {
+  el('btMaos').hidden = true;                   // quem assiste não usa câmera
   // só entra direto quando há uma apresentação no ar e a pessoa não acabou de sair
   if (PARAMETROS.has('saguao')) iniciarSaguao(PARAMETROS.get('saguao'));
   else if (!INFO_INICIAL.sala) iniciarSaguao('vazia');
@@ -4098,12 +4249,11 @@ carregarAnotacoes().then(restaurarArquivos);
   if (PELO_SERVIDOR) setInterval(() => fetch('/servidor', { cache: 'no-store' }).catch(() => {}), 5 * 60 * 1000);
 }
 
-try {
-  await carregarDetector();
-  await abrirCamera();
-} catch (e) {
-  aviso('Não consegui carregar o rastreador de mãos. Verifique a conexão com a internet e recarregue a página.', false);
-}
+el('btMaos').addEventListener('click', alternarRastreio);
+rotuloRastreio();
+ligarLaco();                                    // a lousa desenha mesmo sem câmera (mouse, toque, caneta)
+if (rastreio) await (mudandoRastreio = ligarRastreio().finally(() => { mudandoRastreio = null; }));
+else el('status').hidden = true;
 }
 </script>
 </body>
